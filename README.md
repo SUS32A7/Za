@@ -103,6 +103,11 @@ Environment variables or `config.js`:
 | `QUEUE_MAX_SIZE` | `100` | Max queued requests (0=unlimited) |
 | `QUEUE_MAX_WAIT` | `60000` | Max queue wait time (ms) |
 
+## Having Timeout Errors
+1. Increase timeout temporarily:
+ export TIMEOUT=300000  # 5 minutes
+ export STREAMING_CHUNK_TIMEOUT=120000  # 2 minutes
+
 ## Usage Examples
 
 ### Basic Chat Completion
