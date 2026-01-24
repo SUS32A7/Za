@@ -14,13 +14,20 @@ OpenAI-compatible API proxy for Z.AI (chat.z.ai) with browser automation, client
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/izaart95-jpg/Z-AI-Proxy-Tool.git
+cd Z-AI-Proxy-Tool
+```
+
+### 2. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Start the Server
+### 3. Start the Server
 
 ```bash
 npm start
@@ -28,7 +35,7 @@ npm start
 
 Server runs on `http://localhost:3001` by default.
 
-### 3. Connect Browser Client
+### 4. Connect Browser Client
 
 Open browser console on `https://chat.z.ai` and run:
 
@@ -38,7 +45,7 @@ script.src = 'http://localhost:3001/inject.js';
 document.head.appendChild(script);
 ```
 
-### 4. Make API Requests
+### 5. Make API Requests
 
 ```bash
 curl http://localhost:3001/v1/chat/completions \
