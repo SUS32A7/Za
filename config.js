@@ -13,10 +13,10 @@ module.exports = {
   // Z.AI credentials - FILL THESE IN
   zai: {
     // Your Bearer token from chat.z.ai (the JWT from the Authorization header)
-    bearerToken: process.env.ZAI_BEARER_TOKEN || "",
+    bearerToken: process.env.ZAI_BEARER_TOKEN || "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdhNWRlY2IyLTkyZTItNDY3NS05OWY1LThmMDQ2MmJmOTExYiIsImVtYWlsIjoiZjUwM3N1c0BnbWFpbC5jb20ifQ.skpdmpauQGz0DOQK50N0Kcj0UWC061NAF_QretdRbXoAYeL8lTiW981vXfkEs47ZiyfVlb-cBXQtUblrCvpHrA",
 
     // Your user_id from the request URL
-    userId: process.env.ZAI_USER_ID || "",
+    userId: process.env.ZAI_USER_ID || "7a5decb2-92e2-4675-99f5-8f0462bf911b",
 
     // Default model
     model: process.env.ZAI_MODEL || "glm-5",
