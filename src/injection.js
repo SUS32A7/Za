@@ -343,117 +343,39 @@ function generateInjectionScript(host, wsProtocol) {
     return null;
   }
 
+  // Set to true to log response HTML to console for debugging
+  const DEBUG_HTML = true;
+
   function extractResponseText(element) {
     if (!element) return '';
 
-    // Clone and strip thinking/reasoning sections before extracting text
+    if (DEBUG_HTML) {
+      console.log('[Z.AI Proxy] === RESPONSE ELEMENT DEBUG ===');
+      console.log('[Z.AI Proxy] Tag:', element.tagName, '| Class:', element.className);
+      console.log('[Z.AI Proxy] innerHTML:', element.innerHTML.substring(0, 2000));
+      console.log('[Z.AI Proxy] Children:', Array.from(element.children).map(c => c.tagName + '.' + c.className.split(' ')[0]).join(', '));
+    }
+
+    // Clone and remove thinking/reasoning blocks
     const clone = element.cloneNode(true);
-    const thinkingSelectors = [
-      // Common Z.AI / GLM thinking block selectors
-      '[class*="think"]',
-      '[class*="reasoning"]',
-      '[class*="reason"]',
-      '[class*="Thinking"]',
-      '[class*="chain-of-thought"]',
-      '[class*="cot"]',
-      '[class*="scratchpad"]',
-      '[data-thinking]',
-      '[data-reasoning]',
-      // Collapsible thinking blocks
-      'details',
-      'summary',
-    ];
-    for (const sel of thinkingSelectors) {
-      clone.querySelectorAll(sel).forEach(el => el.remove());
+    for (const sel of ['[class*="think"]','[class*="reasoning"]','[class*="reason"]','details','summary','[data-thinking]','[data-reasoning]']) {
+      try { clone.querySelectorAll(sel).forEach(el => el.remove()); } catch(e) {}
     }
 
-    function nodeToText(node) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        return node.textContent;
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const parts = [];
 
-      const tag = node.tagName.toLowerCase();
-      if (node.style && node.style.display === 'none') return '';
-
-      // Code block - indent lines with 4 spaces to preserve formatting
-      if (tag === 'pre') {
-        const code = node.querySelector('code');
-        const text = (code || node).textContent.trimEnd();
-        return '\n' + text.split('\n').map(l => '    ' + l).join('\n') + '\n';
-      }
-
-      // Inline code - wrap in backtick-style markers
-      if (tag === 'code') {
-        return node.textContent;
-      }
-
-      // Headings
-      if (/^h[1-6]$/.test(tag)) {
-        const level = parseInt(tag[1]);
-        return '\n' + '#'.repeat(level) + ' ' + node.textContent.trim() + '\n';
-      }
-
-      // Paragraphs - always add spacing
-      if (tag === 'p') {
-        const inner = Array.from(node.childNodes).map(nodeToText).join('');
-        const trimmed = inner.trim();
-        return trimmed ? '\n\n' + trimmed + '\n\n' : '';
-      }
-
-      // Block elements - only add spacing if they directly contain text (not just child elements)
-      if (['section', 'article', 'blockquote'].includes(tag)) {
-        const inner = Array.from(node.childNodes).map(nodeToText).join('');
-        const trimmed = inner.trim();
-        return trimmed ? '\n\n' + trimmed + '\n\n' : '';
-      }
-
-      // Divs - recurse but only add newline if they contain direct text nodes
-      if (tag === 'div') {
-        const inner = Array.from(node.childNodes).map(nodeToText).join('');
-        const trimmed = inner.trim();
-        if (!trimmed) return '';
-        // Only add paragraph spacing if this div has direct text children (content div, not layout div)
-        const hasDirectText = Array.from(node.childNodes).some(
-          n => n.nodeType === Node.TEXT_NODE && n.textContent.trim().length > 0
-        );
-        return hasDirectText ? '\n\n' + trimmed + '\n\n' : trimmed;
-      }
-
-      // List items
-      if (tag === 'li') {
-        const inner = Array.from(node.childNodes).map(nodeToText).join('').trim();
-        return '\n- ' + inner;
-      }
-
-      // Lists
-      if (tag === 'ul' || tag === 'ol') {
-        return Array.from(node.childNodes).map(nodeToText).join('') + '\n';
-      }
-
-      // Line break
-      if (tag === 'br') return '\n';
-
-      // Bold
-      if (tag === 'strong' || tag === 'b') {
-        return '**' + node.textContent + '**';
-      }
-
-      // Italic
-      if (tag === 'em' || tag === 'i') {
-        return '*' + node.textContent + '*';
-      }
-
-      // Default: recurse
-      return Array.from(node.childNodes).map(nodeToText).join('');
+    // Try <p> tags first
+    const paragraphs = clone.querySelectorAll('p');
+    if (paragraphs.length > 0) {
+      paragraphs.forEach(p => {
+        const text = p.textContent.trim();
+        if (text) parts.push(text);
+      });
+      return parts.join('\n\n');
     }
 
-    const raw = nodeToText(clone);
-    const fullText = raw.replace(/\n{3,}/g, '\n\n').trim();
-
-    console.log('[Z.AI Proxy] extractResponseText - text length:', fullText.length);
-
-    return fullText;
+    // Fallback: raw textContent
+    return clone.textContent.trim();
   }
 
   function isGenerating() {
