@@ -79,7 +79,10 @@ module.exports = {
 
   // Known Z.AI models (fallback when can't detect)
   knownModels: [
-    'z1',
-    'z1-mini',
+    'glm-5',
+    'glm-4.7',
+    'glm-4.6',
+    'glm-4.5',
+    'glm-4.5-air',
   ],
 };
