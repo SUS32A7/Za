@@ -702,7 +702,7 @@ function generateInjectionScript(host, wsProtocol) {
             }));
             break;
 
-          case 'prompt':
+          case 'prompt': {
             const result = await executePrompt(message.prompt, {
               search: message.search,
               deepThink: message.deepThink || message.thinking,
@@ -734,8 +734,9 @@ function generateInjectionScript(host, wsProtocol) {
               }));
             }
             break;
+          }
 
-          case 'stop-generation':
+          case 'stop-generation': {
             const stopped = await stopGeneration();
             stopStreamingPoller();
             ws.send(JSON.stringify({
@@ -744,11 +745,13 @@ function generateInjectionScript(host, wsProtocol) {
               stopped
             }));
             break;
+          }
 
-          case 'clear-history':
+          case 'clear-history': {
             const cleared = await clearHistory();
             ws.send(JSON.stringify({ type: 'history-cleared', success: cleared }));
             break;
+          }
 
           case 'health-check':
             ws.send(JSON.stringify({
