@@ -346,14 +346,72 @@ function generateInjectionScript(host, wsProtocol) {
   function extractResponseText(element) {
     if (!element) return '';
 
-    // Count paragraphs to see how many we have
-    const paragraphs = element.querySelectorAll('p[dir="auto"]');
-    const paragraphCount = paragraphs.length;
+    function nodeToText(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
 
-    // Get full textContent of the element - this captures ALL paragraphs
-    const fullText = element.textContent.trim();
+      const tag = node.tagName.toLowerCase();
+      if (node.style && node.style.display === 'none') return '';
 
-    console.log('[Z.AI Proxy] extractResponseText - paragraphs:', paragraphCount, 'text length:', fullText.length);
+      // Code block - indent lines with 4 spaces to preserve formatting
+      if (tag === 'pre') {
+        const code = node.querySelector('code');
+        const text = (code || node).textContent.trimEnd();
+        return '\n' + text.split('\n').map(l => '    ' + l).join('\n') + '\n';
+      }
+
+      // Inline code - wrap in backtick-style markers
+      if (tag === 'code') {
+        return node.textContent;
+      }
+
+      // Headings
+      if (/^h[1-6]$/.test(tag)) {
+        const level = parseInt(tag[1]);
+        return '\n' + '#'.repeat(level) + ' ' + node.textContent.trim() + '\n';
+      }
+
+      // Paragraphs and block elements
+      if (['p', 'div', 'section', 'article', 'blockquote'].includes(tag)) {
+        const inner = Array.from(node.childNodes).map(nodeToText).join('');
+        const trimmed = inner.trim();
+        return trimmed ? '\n\n' + trimmed + '\n\n' : '';
+      }
+
+      // List items
+      if (tag === 'li') {
+        const inner = Array.from(node.childNodes).map(nodeToText).join('').trim();
+        return '\n- ' + inner;
+      }
+
+      // Lists
+      if (tag === 'ul' || tag === 'ol') {
+        return Array.from(node.childNodes).map(nodeToText).join('') + '\n';
+      }
+
+      // Line break
+      if (tag === 'br') return '\n';
+
+      // Bold
+      if (tag === 'strong' || tag === 'b') {
+        return '**' + node.textContent + '**';
+      }
+
+      // Italic
+      if (tag === 'em' || tag === 'i') {
+        return '*' + node.textContent + '*';
+      }
+
+      // Default: recurse
+      return Array.from(node.childNodes).map(nodeToText).join('');
+    }
+
+    const raw = nodeToText(element);
+    const fullText = raw.replace(/\n{3,}/g, '\n\n').trim();
+
+    console.log('[Z.AI Proxy] extractResponseText - text length:', fullText.length);
 
     return fullText;
   }
@@ -565,6 +623,9 @@ function generateInjectionScript(host, wsProtocol) {
     console.log('[Z.AI Proxy] Executing prompt:', prompt.substring(0, 50) + '...');
 
     try {
+      // Always start fresh - new chat before every prompt
+      await clearHistory();
+
       // Set features
       if (search !== currentSearch) await setSearch(search);
       if (deepThink !== currentDeepThink) await setDeepThink(deepThink);
