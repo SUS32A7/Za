@@ -1,336 +1,88 @@
-const express = require("express");
-const http = require("http");
-const crypto = require("crypto");
-const config = require("./config");
+POST https://chat.z.ai/api/v2/chat/completions?timestamp=1771963330516&requestId=2378d253-8ea1-4744-8994-a32f4aae0a2f&user_id=7a5decb2-92e2-4675-99f5-8f0462bf911b&version=0.0.1&platform=web&token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdhNWRlY2IyLTkyZTItNDY3NS05OWY1LThmMDQ2MmJmOTExYiIsImVtYWlsIjoiZjUwM3N1c0BnbWFpbC5jb20ifQ.8qroYlAgvAh8bnSotKK0pNJeJmgESPtwMRlQBBvpwj7vbuqPCFV9ONIAqs5b1sDI-Vav9eFy5QIsQPiWaQ6Keg&user_agent=Mozilla%2F5.0+%28Linux%3B+Android+10%3B+K%29+AppleWebKit%2F537.36+%28KHTML%2C+like+Gecko%29+Chrome%2F145.0.0.0+Mobile+Safari%2F537.36&language=ar-SA&languages=ar-SA%2Car%2Cen-US%2Cen&timezone=Asia%2FRiyadh&cookie_enabled=true&screen_width=360&screen_height=803&screen_resolution=360x803&viewport_height=723&viewport_width=360&viewport_size=360x723&color_depth=24&pixel_ratio=3&current_url=https%3A%2F%2Fchat.z.ai%2Fc%2Ff60fbc76-0738-4661-9809-19f61b4ee963&pathname=%2Fc%2Ff60fbc76-0738-4661-9809-19f61b4ee963&search=&hash=&host=chat.z.ai&hostname=chat.z.ai&protocol=https%3A&referrer=&title=Z.ai+-+Free+AI+Chatbot+%26+Agent+powered+by+GLM-5+%26+GLM-4.7&timezone_offset=-180&local_time=2026-02-24T20%3A02%3A10.517Z&utc_time=Tue%2C+24+Feb+2026+20%3A02%3A10+GMT&is_mobile=true&is_touch=true&max_touch_points=5&browser_name=Chrome&os_name=Android&signature_timestamp=1771963330516 200
 
-const app = express();
-const server = http.createServer(app);
+Request Data
 
-app.use(express.json({ limit: "50mb" }));
+{"stream":true,"model":"glm-5","messages":[{"role":"user","content":"Hey"}],"signature_prompt":"Hey","params":{},"extra":{},"features":{"image_generation":false,"web_search":false,"auto_web_search":false,"preview_mode":true,"flags":[],"enable_thinking":true},"variables":{"{{USER_NAME}}":"سوس","{{USER_LOCATION}}":"Unknown","{{CURRENT_DATETIME}}":"2026-02-24 23:02:10","{{CURRENT_DATE}}":"2026-02-24","{{CURRENT_TIME}}":"23:02:10","{{CURRENT_WEEKDAY}}":"Tuesday","{{CURRENT_TIMEZONE}}":"Asia/Riyadh","{{USER_LANGUAGE}}":"en-US"},"chat_id":"f60fbc76-0738-4661-9809-19f61b4ee963","id":"303f730c-8f7d-4eba-9ca7-201a3e07d1d6","current_user_message_id":"0bdc6835-ea8f-41f7-99e8-21cbc4f4bc31","current_user_message_parent_id":null,"background_tasks":{"title_generation":true,"tags_generation":true}}
 
-// CORS
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (req.method === "OPTIONS") return res.sendStatus(200);
-  next();
-});
+Request Headers
 
-// Auth middleware
-function authMiddleware(req, res, next) {
-  if (!config.auth.enabled) return next();
-  const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
-  if (token !== config.auth.token) {
-    return res.status(401).json({ error: { message: "Invalid token", type: "authentication_error" } });
-  }
-  next();
-}
+Authorization: Bearer eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdhNWRlY2IyLTkyZTItNDY3NS05OWY1LThmMDQ2MmJmOTExYiIsImVtYWlsIjoiZjUwM3N1c0BnbWFpbC5jb20ifQ.8qroYlAgvAh8bnSotKK0pNJeJmgESPtwMRlQBBvpwj7vbuqPCFV9ONIAqs5b1sDI-Vav9eFy5QIsQPiWaQ6Keg
+Content-Type: application/json
+Accept-Language: en-US
+X-FE-Version: prod-fe-1.0.242
+X-Signature: 2591f48db588ee4fbc0081a6e407d030109ac14128b2489dfd03a329c5360796
 
-function generateId() {
-  return crypto.randomUUID();
-}
+Response Headers
 
-function estimateTokens(text) {
-  return Math.ceil((text || "").length / 4);
-}
+access-control-allow-credentials: true
+access-control-allow-origin: https://chat.z.ai
+access-control-expose-headers: X-Chat-Id, X-Trace-ID
+connection: keep-alive
+content-encoding: br
+content-type: text/event-stream; charset=utf-8
+date: Tue, 24 Feb 2026 20:02:12 GMT
+eagleid: 2ff6319e17719633307075202e
+server: ESA
+timing-allow-origin: *
+transfer-encoding: chunked
+vary: Accept-Encoding, Origin
+via: ens-cache31.l2sg7[1385,0,DP], ens-cache23.l2de4[1540,0,DP], ens-cache10.fr5[1559,0,DP], ens-cache10.fr5[1560,0]
+x-process-time: 2
+x-site-cache-status: DYNAMIC
+x-trace-id: 19c913eb1170db25
 
-// Build the Z.AI request headers
-function zaiHeaders() {
-  return {
-    "Authorization": `Bearer ${config.zai.bearerToken}`,
-    "Content-Type": "application/json",
-    "Accept": "application/json, text/event-stream",
-    "Accept-Language": "en-US",
-    "X-FE-Version": "prod-fe-1.0.242",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36",
-  };
-}
+data: {"type":"chat:completion","data":{"delta_content":"Alright, the user just","phase":"thinking"}}
 
-// Step 1: Create a new chat, returns chat_id
-async function createChat(model, userMessageId, userContent) {
-  const timestamp = Date.now();
-  const body = {
-    chat: {
-      id: "",
-      title: "New Chat",
-      models: [model],
-      params: {},
-      history: {
-        messages: {
-          [userMessageId]: {
-            id: userMessageId,
-            parentId: null,
-            childrenIds: [],
-            role: "user",
-            content: userContent,
-            timestamp: Math.floor(timestamp / 1000),
-            models: [model],
-          },
-        },
-        currentId: userMessageId,
-      },
-      tags: [],
-      flags: [],
-      features: [{ type: "tool_selector", server: "tool_selector_h", status: "hidden" }],
-      mcp_servers: [],
-      enable_thinking: config.zai.enableThinking,
-      auto_web_search: false,
-      message_version: 1,
-      extra: {},
-      timestamp,
-    },
-  };
+data: {"type":"chat:completion","data":{"delta_content":" said \"Hey\" –","phase":"thinking"}}
 
-  const resp = await fetch("https://chat.z.ai/api/v1/chats/new", {
-    method: "POST",
-    headers: zaiHeaders(),
-    body: JSON.stringify(body),
-  });
+data: {"type":"chat:completion","data":{"delta_content":" a simple greeting that's","phase":"thinking"}}
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Failed to create chat: ${resp.status} ${text}`);
-  }
+data: {"type":"chat:completion","data":{"delta_content":" open-ended. I should","phase":"thinking"}}
 
-  const data = await resp.json();
-  return data.id; // chat_id
-}
+data: {"type":"chat:completion","data":{"delta_content":" respond in a friendly but","phase":"thinking"}}
 
-// Step 2: Stream completion, returns full response text
-async function streamCompletion(chatId, model, messages, onChunk) {
-  const timestamp = Date.now();
-  const userMessageId = generateId();
-  const completionId = generateId();
+data: {"type":"chat:completion","data":{"delta_content":" helpful way that encourages them","phase":"thinking"}}
 
-  // Build messages array - extract last user message for signature_prompt
-  const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
-  const signaturePrompt = lastUserMsg?.content || "";
+data: {"type":"chat:completion","data":{"delta_content":" to share what they need","phase":"thinking"}}
 
-  // Build query params (Z.AI tracks these but they don't affect auth)
-  const params = new URLSearchParams({
-    timestamp: timestamp.toString(),
-    requestId: generateId(),
-    user_id: config.zai.userId,
-    version: "0.0.1",
-    platform: "web",
-    token: config.zai.bearerToken,
-  });
+data: {"type":"chat:completion","data":{"delta_content":". Hmm, maybe I","phase":"thinking"}}
 
-  const body = {
-    stream: true,
-    model,
-    messages,
-    signature_prompt: signaturePrompt,
-    params: {},
-    extra: {},
-    features: {
-      image_generation: false,
-      web_search: false,
-      auto_web_search: false,
-      preview_mode: true,
-      flags: [],
-      enable_thinking: config.zai.enableThinking,
-    },
-    variables: {
-      "{{CURRENT_DATETIME}}": new Date().toISOString().replace("T", " ").substring(0, 19),
-      "{{CURRENT_DATE}}": new Date().toISOString().substring(0, 10),
-    },
-    chat_id: chatId,
-    id: completionId,
-    current_user_message_id: userMessageId,
-    current_user_message_parent_id: null,
-    background_tasks: { title_generation: true, tags_generation: false },
-  };
+data: {"type":"chat:completion","data":{"delta_content":" can offer different types of","phase":"thinking"}}
 
-  const resp = await fetch(`https://chat.z.ai/api/v2/chat/completions?${params}`, {
-    method: "POST",
-    headers: { ...zaiHeaders(), Accept: "text/event-stream" },
-    body: JSON.stringify(body),
-  });
+data: {"type":"chat:completion","data":{"delta_content":" assistance they might be looking","phase":"thinking"}}
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Completion failed: ${resp.status} ${text}`);
-  }
+data: {"type":"chat:completion","data":{"delta_content":" for. \n\nThe response","phase":"thinking"}}
 
-  // Parse SSE stream
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let fullText = "";
+data: {"type":"chat:completion","data":{"delta_content":" I generated covers the basics","phase":"thinking"}}
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+data: {"type":"chat:completion","data":{"delta_content":" well: returning the greeting","phase":"thinking"}}
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop(); // keep incomplete line in buffer
+data: {"type":"chat:completion","data":{"delta_content":", stating my purpose as","phase":"thinking"}}
 
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      const raw = line.slice(6).trim();
-      if (raw === "[DONE]") continue;
+data: {"type":"chat:completion","data":{"delta_content":" an AI assistant, and","phase":"thinking"}}
 
-      let parsed;
-      try { parsed = JSON.parse(raw); } catch { continue; }
+data: {"type":"chat:completion","data":{"delta_content":" giving examples of what I","phase":"thinking"}}
 
-      const phase = parsed?.data?.phase;
-      const delta = parsed?.data?.delta_content || "";
+data: {"type":"chat:completion","data":{"delta_content":" can help with. That","phase":"thinking"}}
 
-      // Skip thinking phase entirely
-      if (phase === "thinking") continue;
+data: {"type":"chat:completion","data":{"delta_content":"'s a solid foundation.","phase":"thinking"}}
 
-      if (delta) {
-        fullText += delta;
-        if (onChunk) onChunk(delta);
-      }
-    }
-  }
+data: {"type":"chat:completion","data":{"delta_content":" But let me think about","phase":"thinking"}}
 
-  return fullText;
-}
+data: {"type":"chat:completion","data":{"delta_content":" what the user might actually","phase":"thinking"}}
 
-// Convert OpenAI messages to Z.AI format (just pass through, same structure)
-function prepareMessages(messages) {
-  return messages
-    .filter(m => m.role !== "system")
-    .map(m => ({
-      role: m.role,
-      content: typeof m.content === "string" ? m.content : m.content.map(p => p.text || "").join(""),
-    }));
-}
+data: {"type":"chat:completion","data":{"delta_content":" need right now. They","phase":"thinking"}}
 
-// ============== ROUTES ==============
+data: {"type":"chat:completion","data":{"delta_content":" could be: 1","phase":"thinking"}}
 
-app.get("/", (req, res) => {
-  res.json({
-    status: "Z.AI Direct API Proxy",
-    model: config.zai.model,
-    endpoints: ["/v1/models", "/v1/chat/completions"],
-  });
-});
+data: {"type":"chat:completion","data":{"delta_content":") just testing the waters","phase":"thinking"}}
 
-app.get("/v1/models", authMiddleware, (req, res) => {
-  res.json({
-    object: "list",
-    data: config.knownModels.map(m => ({
-      id: m,
-      object: "model",
-      created: Math.floor(Date.now() / 1000),
-      owned_by: "z-ai",
-    })),
-  });
-});
+data: {"type":"chat:completion","data":{"delta_content":", 2) have","phase":"thinking"}}
 
-app.post("/v1/chat/completions", authMiddleware, async (req, res) => {
-  const { model, messages, stream = false } = req.body;
+data: {"type":"chat:completion","data":{"delta_content":" a specific question in mind","phase":"thinking"}}
 
-  if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: { message: "messages required", type: "invalid_request_error" } });
-  }
+data: {"type":"chat:completion","data":{"delta_content":" but aren't sure how","phase":"thinking"}}
 
-  if (!config.zai.bearerToken) {
-    return res.status(500).json({ error: { message: "ZAI_BEARER_TOKEN not configured", type: "configuration_error" } });
-  }
+data: {"type":"chat:completion","data":{"delta_content":" to ask, or ","phase":"thinking"}}
 
-  const useModel = model || config.zai.model;
-  const requestId = generateId();
-  const zaiMessages = prepareMessages(messages);
-  const lastUserContent = [...zaiMessages].reverse().find(m => m.role === "user")?.content || "Hello";
-
-  try {
-    // Create a fresh chat for every request
-    const chatId = await createChat(useModel, generateId(), lastUserContent);
-
-    if (stream) {
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no");
-      res.flushHeaders();
-
-      let fullText = "";
-
-      await streamCompletion(chatId, useModel, zaiMessages, (delta) => {
-        fullText += delta;
-        const chunk = {
-          id: `chatcmpl-${requestId}`,
-          object: "chat.completion.chunk",
-          created: Math.floor(Date.now() / 1000),
-          model: useModel,
-          choices: [{ index: 0, delta: { content: delta }, finish_reason: null }],
-        };
-        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-      });
-
-      const finalChunk = {
-        id: `chatcmpl-${requestId}`,
-        object: "chat.completion.chunk",
-        created: Math.floor(Date.now() / 1000),
-        model: useModel,
-        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-      };
-      res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
-      res.write("data: [DONE]\n\n");
-      res.end();
-
-    } else {
-      const text = await streamCompletion(chatId, useModel, zaiMessages, null);
-
-      res.json({
-        id: `chatcmpl-${requestId}`,
-        object: "chat.completion",
-        created: Math.floor(Date.now() / 1000),
-        model: useModel,
-        choices: [{
-          index: 0,
-          message: { role: "assistant", content: text },
-          finish_reason: "stop",
-        }],
-        usage: {
-          prompt_tokens: estimateTokens(zaiMessages.map(m => m.content).join(" ")),
-          completion_tokens: estimateTokens(text),
-          total_tokens: estimateTokens(zaiMessages.map(m => m.content).join(" ")) + estimateTokens(text),
-        },
-      });
-    }
-
-  } catch (err) {
-    console.error("[API] Error:", err.message);
-    if (stream) {
-      res.write(`data: ${JSON.stringify({ error: { message: err.message } })}\n\n`);
-      res.end();
-    } else {
-      res.status(500).json({ error: { message: err.message, type: "api_error" } });
-    }
-  }
-});
-
-// Legacy endpoint
-app.post("/prompt", authMiddleware, async (req, res) => {
-  const { prompt, model } = req.body;
-  if (!prompt) return res.status(400).json({ error: "prompt required" });
-
-  try {
-    const chatId = await createChat(model || config.zai.model, generateId(), prompt);
-    const text = await streamCompletion(chatId, model || config.zai.model, [{ role: "user", content: prompt }], null);
-    res.json({ success: true, response: text });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-server.listen(config.server.port, config.server.host, () => {
-  console.log(`
-╔══════════════════════════════════════════╗
-║       Z.AI Direct API Proxy Started      ║
-╠══════════════════════════════════════════╣
-║  URL:   http://localhost:${config.server.port}           ║
-║  Model: ${config.zai.model.padEnd(32)}║
-╠══════════════════════════════════════════╣
-║  NO BROWSER NEEDED - Direct API mode     ║
-╚══════════════════════════════════════════╝
-`);
-});
+data: {"type":"chat:completion","data":{"delta_
