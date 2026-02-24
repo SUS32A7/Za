@@ -790,6 +790,123 @@ function generateInjectionScript(host, wsProtocol) {
             sessionStorage.clear();
             location.reload();
             break;
+
+          // ============ SIGNED FETCH BRIDGE ============
+          // Server asks browser to make a signed fetch (browser has Z.AI's signing JS)
+          case 'make-fetch': {
+            const { requestId, chatId, model, messages, zaiMessages } = message;
+            (async () => {
+              try {
+                const timestamp = Date.now();
+                const completionId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+                const userMessageId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+                const lastUserMsg = [...(zaiMessages || messages)].reverse().find(m => m.role === 'user');
+                const signaturePrompt = lastUserMsg?.content || '';
+                const useModel = model || 'glm-5';
+
+                // Prepare messages - strip system, flatten content
+                const preparedMessages = (zaiMessages || messages)
+                  .filter(m => m.role !== 'system')
+                  .map(m => ({
+                    role: m.role,
+                    content: typeof m.content === 'string' ? m.content :
+                      (m.content || []).map(p => p.text || '').join(''),
+                  }));
+
+                const params = new URLSearchParams({
+                  timestamp: timestamp.toString(),
+                  requestId: completionId,
+                  user_id: '',        // Z.AI's JS fills this from its own state
+                  version: '0.0.1',
+                  platform: 'web',
+                  token: '',          // Z.AI's JS fills this from its own state
+                  signature_timestamp: timestamp.toString(),
+                });
+
+                const body = {
+                  stream: true,
+                  model: useModel,
+                  messages: preparedMessages,
+                  signature_prompt: signaturePrompt,
+                  params: {},
+                  extra: {},
+                  features: {
+                    image_generation: false,
+                    web_search: false,
+                    auto_web_search: false,
+                    preview_mode: true,
+                    flags: [],
+                    enable_thinking: false,
+                  },
+                  variables: {
+                    '{{CURRENT_DATETIME}}': new Date().toISOString().replace('T', ' ').substring(0, 19),
+                    '{{CURRENT_DATE}}': new Date().toISOString().substring(0, 10),
+                  },
+                  chat_id: chatId,
+                  id: completionId,
+                  current_user_message_id: userMessageId,
+                  current_user_message_parent_id: null,
+                  background_tasks: { title_generation: true, tags_generation: false },
+                };
+
+                // Use the native fetch — Z.AI's own service worker / interceptor adds X-Signature
+                const resp = await fetch('/api/v2/chat/completions?' + params.toString(), {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream',
+                    'Accept-Language': navigator.language || 'en-US',
+                  },
+                  body: JSON.stringify(body),
+                  credentials: 'include',
+                });
+
+                if (!resp.ok) {
+                  const errText = await resp.text();
+                  ws.send(JSON.stringify({ type: 'fetch-error', requestId, error: resp.status + ' ' + errText }));
+                  return;
+                }
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let fullText = '';
+
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+
+                  buffer += decoder.decode(value, { stream: true });
+                  const lines = buffer.split('\\n');
+                  buffer = lines.pop();
+
+                  for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const raw = line.slice(6).trim();
+                    if (raw === '[DONE]') continue;
+
+                    let parsed;
+                    try { parsed = JSON.parse(raw); } catch { continue; }
+
+                    const phase = parsed?.data?.phase;
+                    const delta = parsed?.data?.delta_content || '';
+
+                    if (phase === 'thinking') continue;
+
+                    if (delta) {
+                      fullText += delta;
+                      ws.send(JSON.stringify({ type: 'fetch-chunk', requestId, delta }));
+                    }
+                  }
+                }
+
+                ws.send(JSON.stringify({ type: 'fetch-done', requestId, fullText }));
+              } catch (err) {
+                ws.send(JSON.stringify({ type: 'fetch-error', requestId, error: err.message }));
+              }
+            })();
+            break;
+          }
         }
       } catch (err) {
         console.error('[Z.AI Proxy] Error:', err);
