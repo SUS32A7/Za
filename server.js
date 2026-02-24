@@ -902,7 +902,8 @@ async function sendPromptToClient(prompt, options = {}) {
   if (!availableClientId) {
     try {
       const queueResult = await pool.queueRequest({ prompt, options });
-      return await sendPromptToSpecificClient(queueResult.clientId, prompt, { ...options, requestId });
+      // Client is already marked busy by processQueue — pass a flag to skip double-marking
+      return await sendPromptToSpecificClient(queueResult.clientId, prompt, { ...options, requestId, _alreadyBusy: true });
     } catch (err) {
       throw new Error("No available clients and queue failed: " + err.message);
     }
@@ -912,36 +913,45 @@ async function sendPromptToClient(prompt, options = {}) {
 }
 
 async function sendPromptToSpecificClient(clientId, prompt, options) {
-  const { search = false, deepThink = false, stream = false, freshSession = false, requestId: providedRequestId = null } = options;
+  const { search = false, deepThink = false, stream = false, freshSession = false, requestId: providedRequestId = null, _alreadyBusy = false } = options;
 
   const client = pool.getClient(clientId);
   if (!client || !client.ws) {
     throw new Error("Client not available");
   }
 
-  pool.setClientBusy(clientId);
+  if (!_alreadyBusy) {
+    pool.setClientBusy(clientId);
+  }
 
-  const requestId = providedRequestId || generateId();
+  pool.stats.totalRequests++;
+  const startTime = Date.now();
   const timeout = config.timeouts.default;
 
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       pendingRequests.delete(requestId);
       pool.setClientIdle(clientId);
+      pool.stats.failedRequests++;
       reject(new Error("Request timeout"));
     }, timeout);
 
     pendingRequests.set(requestId, {
       resolve: (result) => {
         clearTimeout(timeoutId);
+        const latency = Date.now() - startTime;
+        pool.stats.successfulRequests++;
+        pool.stats.latencySum += latency;
+        pool.stats.averageLatency = pool.stats.latencySum / pool.stats.successfulRequests;
         resolve({ ...result, clientId, requestId });
       },
       reject: (err) => {
         clearTimeout(timeoutId);
+        pool.stats.failedRequests++;
         reject(err);
       },
       clientId,
-      startTime: Date.now()
+      startTime
     });
 
     // Clear history if fresh session requested
