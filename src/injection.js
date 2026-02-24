@@ -346,6 +346,27 @@ function generateInjectionScript(host, wsProtocol) {
   function extractResponseText(element) {
     if (!element) return '';
 
+    // Clone and strip thinking/reasoning sections before extracting text
+    const clone = element.cloneNode(true);
+    const thinkingSelectors = [
+      // Common Z.AI / GLM thinking block selectors
+      '[class*="think"]',
+      '[class*="reasoning"]',
+      '[class*="reason"]',
+      '[class*="Thinking"]',
+      '[class*="chain-of-thought"]',
+      '[class*="cot"]',
+      '[class*="scratchpad"]',
+      '[data-thinking]',
+      '[data-reasoning]',
+      // Collapsible thinking blocks
+      'details',
+      'summary',
+    ];
+    for (const sel of thinkingSelectors) {
+      clone.querySelectorAll(sel).forEach(el => el.remove());
+    }
+
     function nodeToText(node) {
       if (node.nodeType === Node.TEXT_NODE) {
         return node.textContent;
@@ -373,11 +394,30 @@ function generateInjectionScript(host, wsProtocol) {
         return '\n' + '#'.repeat(level) + ' ' + node.textContent.trim() + '\n';
       }
 
-      // Paragraphs and block elements
-      if (['p', 'div', 'section', 'article', 'blockquote'].includes(tag)) {
+      // Paragraphs - always add spacing
+      if (tag === 'p') {
         const inner = Array.from(node.childNodes).map(nodeToText).join('');
         const trimmed = inner.trim();
         return trimmed ? '\n\n' + trimmed + '\n\n' : '';
+      }
+
+      // Block elements - only add spacing if they directly contain text (not just child elements)
+      if (['section', 'article', 'blockquote'].includes(tag)) {
+        const inner = Array.from(node.childNodes).map(nodeToText).join('');
+        const trimmed = inner.trim();
+        return trimmed ? '\n\n' + trimmed + '\n\n' : '';
+      }
+
+      // Divs - recurse but only add newline if they contain direct text nodes
+      if (tag === 'div') {
+        const inner = Array.from(node.childNodes).map(nodeToText).join('');
+        const trimmed = inner.trim();
+        if (!trimmed) return '';
+        // Only add paragraph spacing if this div has direct text children (content div, not layout div)
+        const hasDirectText = Array.from(node.childNodes).some(
+          n => n.nodeType === Node.TEXT_NODE && n.textContent.trim().length > 0
+        );
+        return hasDirectText ? '\n\n' + trimmed + '\n\n' : trimmed;
       }
 
       // List items
@@ -408,7 +448,7 @@ function generateInjectionScript(host, wsProtocol) {
       return Array.from(node.childNodes).map(nodeToText).join('');
     }
 
-    const raw = nodeToText(element);
+    const raw = nodeToText(clone);
     const fullText = raw.replace(/\n{3,}/g, '\n\n').trim();
 
     console.log('[Z.AI Proxy] extractResponseText - text length:', fullText.length);
