@@ -1159,7 +1159,7 @@ app.post("/v1/messages", authMiddleware, async (req, res) => {
     const m = (model || "").toLowerCase();
     if (m.includes("opus"))   return "glm-5";
     if (m.includes("haiku"))  return "glm-4.7";
-    return "glm-4.5"; // sonnet and everything else
+    return "glm-5"; // sonnet and everything else
   })();
 
   const opts = {
