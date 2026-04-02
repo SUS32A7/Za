@@ -2,6 +2,8 @@
 
 OpenAI-compatible API proxy for Z.AI (chat.z.ai) with two operating modes: a **Direct HTTP mode** (no browser needed) and a **Browser Automation mode** for legacy use.
 
+### Update: GLM 5 Turbo Added
+
 ---
 
 ## Modes
