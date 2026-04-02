@@ -579,7 +579,7 @@ function formatOpenAIResponse(result, model, requestId, stream = false, fullCont
         id: `chatcmpl-${requestId}`,
         object: "chat.completion.chunk",
         created: timestamp,
-        model: model || "glm-4.7",
+        model: model || "glm-5",
         choices: [{ index: 0, delta: { content: rawContent }, finish_reason: null }]
       };
     }
@@ -592,7 +592,7 @@ function formatOpenAIResponse(result, model, requestId, stream = false, fullCont
         id: `chatcmpl-${requestId}`,
         object: "chat.completion.chunk",
         created: timestamp,
-        model: model || "glm-4.7",
+        model: model || "glm-5",
         choices: [{
           index: 0,
           delta: {
@@ -610,7 +610,7 @@ function formatOpenAIResponse(result, model, requestId, stream = false, fullCont
       id: `chatcmpl-${requestId}`,
       object: "chat.completion.chunk",
       created: timestamp,
-      model: model || "glm-4.7",
+      model: model || "glm-5",
       choices: [{ index: 0, delta: { content: rawContent }, finish_reason: "stop" }]
     };
   }
@@ -622,7 +622,7 @@ function formatOpenAIResponse(result, model, requestId, stream = false, fullCont
     id: `chatcmpl-${requestId}`,
     object: "chat.completion",
     created: timestamp,
-    model: model || "glm-4.7",
+    model: model || "glm-5",
     choices: [{
       index: 0,
       message: {
@@ -787,7 +787,7 @@ function getContextVars() {
 
 async function* sendToZAI(prompt, options = {}) {
   const {
-    model = "glm-4.7",
+    model = "glm-5",
     webSearch = session.features.webSearch,
     thinking = session.features.thinking,
     imageGen = session.features.imageGen,
@@ -1158,7 +1158,7 @@ app.post("/v1/messages", authMiddleware, async (req, res) => {
   const zaiModel = (() => {
     const m = (model || "").toLowerCase();
     if (m.includes("opus"))   return "glm-5";
-    if (m.includes("haiku"))  return "glm-4.7";
+    if (m.includes("haiku"))  return "glm-5";
     return "glm-5"; // sonnet and everything else
   })();
 
@@ -1359,11 +1359,11 @@ app.get("/v1/models", authMiddleware, (req, res) => {
 });
 
 app.get("/models", authMiddleware, (req, res) => {
-  res.json({ models: knownModels, currentModel: "glm-4.7" });
+  res.json({ models: knownModels, currentModel: "glm-5" });
 });
 
 app.post("/v1/chat/completions", authMiddleware, async (req, res) => {
-  const { model = "glm-4.7", messages, stream = true, deepThink, search, webSearch } = req.body;
+  const { model = "glm-5", messages, stream = true, deepThink, search, webSearch } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json(formatOpenAIError("messages is required and must be an array", "invalid_request_error"));
