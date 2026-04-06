@@ -1,32 +1,39 @@
 # Z.AI Proxy API
 
-OpenAI-compatible API proxy for Z.AI (chat.z.ai) with two operating modes: a **Direct HTTP mode** (no browser needed) and a **Browser Automation mode** for legacy use.
-
-### Update: GLM 5 Turbo Added
+> OpenAI-compatible API proxy for [chat.z.ai](https://chat.z.ai) — available in two modes.
 
 ---
 
-## Modes
+## Overview
 
-| Mode | File | Description |
-|------|------|-------------|
-| **Direct HTTP** ⚡ | `main.js` | Calls Z.AI's REST API directly using HMAC signatures. No browser required. |
-| **Browser Automation** 🌐 | `browser.js` | Connects to a live browser tab via WebSocket injection. Requires browser open. |
+| Mode | File | Description | Status |
+|------|------|-------------|--------|
+| ⚡ **Direct HTTP** | `main.js` | Calls Z.AI's REST API directly using HMAC signatures. No browser required. | ✅ Recommended |
+| 🌐 **Browser Automation** | `browser.js` | Connects to a live browser tab via WebSocket injection. Requires browser open. | ⚠️ Deprecated |
 
-**Recommended: use `main.js`** — it's faster, more stable, and requires no browser setup `browser.js` is deprecated and wont be updated . If you are facing issues switch to browser.js
+> **Recommendation:** Use `main.js`. It's faster, more stable, and requires no browser setup.  
+> `browser.js` is deprecated and will not receive further updates. Switch to it only as a fallback if you encounter issues with `main.js`.
+
+---
+
+## What's New
+
+- **GLM 5V Turbo** model added
+- **Anthropic API** support added
+- **Claude Code** Integration added
 
 ---
 
 ## Features
 
-- **OpenAI-Compatible API** — Drop-in replacement for OpenAI API
+- **OpenAI-Compatible API** — Drop-in replacement for the OpenAI API
 - **Streaming Support** — Real-time SSE streaming responses
 - **Tool Call Parsing** — Full support for Roo Code / Kilo Code XML tool format
-- **Session Management** — Fresh session support with `X-Fresh-Session` header
+- **Session Management** — Fresh session support via `X-Fresh-Session` header
 - **Feature Toggles** — Web search, deep thinking, image generation, preview mode
-- **Auto Session Recovery** — Re-authenticates automatically on token expiry (Direct mode)
-- **Client Pool** — Multiple browser clients with LRU/round-robin/random rotation (Browser mode)
-- **Rate Limit Handling** — Automatic cooldown and recovery (Browser mode)
+- **Auto Session Recovery** — Re-authenticates automatically on token expiry *(Direct mode)*
+- **Client Pool** — Multiple browser clients with LRU / round-robin / random rotation *(Browser mode)*
+- **Rate Limit Handling** — Automatic cooldown and recovery *(Browser mode)*
 
 ---
 
@@ -42,7 +49,7 @@ npm install
 
 ---
 
-### Mode A: Direct HTTP (Recommended)
+### Mode A — Direct HTTP (Recommended)
 
 No browser needed. Authenticates as a guest and calls Z.AI's internal API directly.
 
@@ -54,9 +61,9 @@ Server starts on `http://localhost:3001`.
 
 ---
 
-### Mode B: Browser Automation (Legacy)
+### Mode B — Browser Automation (Legacy)
 
-Requires a browser tab open at `https://chat.z.ai`.
+**Requires** a browser tab open at `https://chat.z.ai`.
 
 ```bash
 node browser.js
@@ -70,11 +77,11 @@ script.src = 'http://localhost:3001/inject.js';
 document.head.appendChild(script);
 ```
 
-> **IMPORTANT:** Keep the browser tab open and in the foreground while using this mode.
+> ⚠️ **Important:** Keep the browser tab open and in the foreground while using this mode.
 
 ---
 
-## Make API Requests
+## Making API Requests
 
 ```bash
 curl http://localhost:3001/v1/chat/completions \
@@ -85,43 +92,43 @@ curl http://localhost:3001/v1/chat/completions \
 
 ---
 
-## API Endpoints
+## API Reference
 
-### OpenAI-Compatible
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/v1/models` | GET | List available models |
-| `/v1/chat/completions` | POST | Chat completion (streaming / non-streaming) |
-
-### Legacy
+### OpenAI-Compatible Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/prompt` | POST | Simple prompt endpoint |
-| `/models` | GET | List models (legacy format) |
-| `/features` | POST | Toggle webSearch, thinking, imageGen, previewMode |
+| `/v1/models` | `GET` | List available models |
+| `/v1/chat/completions` | `POST` | Chat completion (streaming / non-streaming) |
 
-### Admin
+### Legacy Endpoints
 
-| Endpoint | Method | Description | Modes |
-|----------|--------|-------------|-------|
-| `/status` | GET | Session / pool status | Both |
-| `/admin/health` | GET | Health check | Both |
-| `/admin/stats` | GET | Statistics | Both |
-| `/admin/clients` | GET | List clients / session info | Both |
-| `/admin/session/clear` | POST | Clear conversation history + new chatId | Direct |
-| `/admin/clients/:id/clear` | POST | Clear client chat history | Both |
-| `/admin/clients/:id` | DELETE | Disconnect browser client | Browser |
-| `/admin/queue` | GET | Request queue status | Browser |
-| `/stop` | POST | Stop current generation | Both |
-| `/inject.js` | GET | Browser injection script | Browser |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/prompt` | `POST` | Simple prompt endpoint |
+| `/models` | `GET` | List models (legacy format) |
+| `/features` | `POST` | Toggle `webSearch`, `thinking`, `imageGen`, `previewMode` |
+
+### Admin Endpoints
+
+| Endpoint | Method | Description | Mode |
+|----------|--------|-------------|------|
+| `/status` | `GET` | Session / pool status | Both |
+| `/admin/health` | `GET` | Health check | Both |
+| `/admin/stats` | `GET` | Statistics | Both |
+| `/admin/clients` | `GET` | List clients / session info | Both |
+| `/admin/session/clear` | `POST` | Clear conversation history and generate new `chatId` | Direct |
+| `/admin/clients/:id/clear` | `POST` | Clear client chat history | Both |
+| `/admin/clients/:id` | `DELETE` | Disconnect a browser client | Browser |
+| `/admin/queue` | `GET` | Request queue status | Browser |
+| `/stop` | `POST` | Stop current generation | Both |
+| `/inject.js` | `GET` | Browser injection script | Browser |
 
 ---
 
 ## Configuration
 
-Set via environment variables or `config.js`:
+Configure via environment variables or `config.js`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -129,15 +136,17 @@ Set via environment variables or `config.js`:
 | `HOST` | `0.0.0.0` | Server host |
 | `AUTH_TOKEN` | `ZaiProxy2024` | API authentication token |
 | `TIMEOUT` | `120000` | Default request timeout (ms) |
-| `ROTATION_STRATEGY` | `lru` | Client rotation: `lru`, `round-robin`, `random` *(Browser mode)* |
+| `ROTATION_STRATEGY` | `lru` | Client rotation strategy: `lru`, `round-robin`, `random` *(Browser mode)* |
 | `RATE_LIMIT_COOLDOWN` | `300000` | Rate limit cooldown in ms *(Browser mode)* |
 | `QUEUE_MAX_SIZE` | `100` | Max queued requests *(Browser mode)* |
 | `QUEUE_MAX_WAIT` | `60000` | Max queue wait time in ms *(Browser mode)* |
 
-### Timeout Errors
+### Handling Timeout Errors
+
+If you're experiencing timeout issues, increase these values:
 
 ```bash
-export TIMEOUT=300000              # 5 minutes
+export TIMEOUT=300000                  # 5 minutes
 export STREAMING_CHUNK_TIMEOUT=120000  # 2 minutes
 ```
 
@@ -202,7 +211,6 @@ curl http://localhost:3001/v1/chat/completions \
 ### Toggle Features (Direct Mode)
 
 ```bash
-# Enable web search and thinking
 curl -X POST http://localhost:3001/features \
   -H "Authorization: Bearer Waguri" \
   -H "Content-Type: application/json" \
@@ -233,11 +241,12 @@ curl http://localhost:3001/prompt \
 
 ## Tool Call Support
 
-Parses Roo Code / Kilo Code XML tool calls automatically. Works in both modes.
+Roo Code / Kilo Code XML tool calls are parsed automatically. Works in both modes.
 
 ### Supported Formats
 
 **XML Format (Recommended)**
+
 ```xml
 <tool_call>
 <function=write_to_file>
@@ -247,7 +256,8 @@ Parses Roo Code / Kilo Code XML tool calls automatically. Works in both modes.
 </tool_call>
 ```
 
-**Roo/Cline Style**
+**Roo / Cline Style**
+
 ```xml
 <write_to_file>
 <path>test.txt</path>
@@ -257,28 +267,31 @@ Parses Roo Code / Kilo Code XML tool calls automatically. Works in both modes.
 
 ### Supported Tools
 
-- `write_file`, `write_to_file`, `create_file`
-- `read_file`, `read_from_file`, `read_multiple_files`
-- `edit_file`, `replace_in_file`, `apply_diff`
-- `delete_file`, `move_file`, `copy_file`, `rename_file`
-- `list_files`, `list_directory`, `find_files`
-- `search_files`, `search_code`, `grep_search`
-- `execute_command`, `run_command`, `execute_shell`
-- `attempt_completion`, `complete_task`, `finish_task`
-- `ask_followup_question`, `ask_question`
-- `browser_action`, `update_todo_list`
-- `switch_mode`, `new_task`, `fetch_instructions`
-- OpenCode tools: `write`, `read`, `edit`, `bash`, `glob`, `grep`, `task`, `webfetch`, `todowrite`, `todoread`
+| Category | Tools |
+|----------|-------|
+| **File Write** | `write_file`, `write_to_file`, `create_file` |
+| **File Read** | `read_file`, `read_from_file`, `read_multiple_files` |
+| **File Edit** | `edit_file`, `replace_in_file`, `apply_diff` |
+| **File Management** | `delete_file`, `move_file`, `copy_file`, `rename_file` |
+| **Directory** | `list_files`, `list_directory`, `find_files` |
+| **Search** | `search_files`, `search_code`, `grep_search` |
+| **Shell** | `execute_command`, `run_command`, `execute_shell` |
+| **Task Flow** | `attempt_completion`, `complete_task`, `finish_task` |
+| **Interaction** | `ask_followup_question`, `ask_question` |
+| **Misc** | `browser_action`, `update_todo_list`, `switch_mode`, `new_task`, `fetch_instructions` |
+| **OpenCode** | `write`, `read`, `edit`, `bash`, `glob`, `grep`, `task`, `webfetch`, `todowrite`, `todoread` |
 
 ---
 
 ## Roo Code / Kilo Code Integration
 
-In settings, configure:
+In your Roo Code or Kilo Code settings, configure:
 
-- **API Base URL**: `http://localhost:3001/v1`
-- **API Key**: `Waguri`
-- **Model**: `glm-4.7`, `z1`, or `z1-mini`
+| Setting | Value |
+|---------|-------|
+| **API Base URL** | `http://localhost:3001/v1` |
+| **API Key** | `Waguri` |
+| **Model** | `glm-4.7`, `z1`, or `z1-mini` |
 
 ---
 
@@ -287,8 +300,9 @@ In settings, configure:
 | Model | Description |
 |-------|-------------|
 | `glm-4.7` | Default model (Direct mode) |
-| `z1` | Z.AI main model |
-| `z1-mini` | Z.AI mini model |
+| `glm-z1` | GLM Z1 — Z.AI main model |
+| `glm-z1-mini` | GLM Z1 Mini — Z.AI lightweight model |
+| `glm-5v-turbo` | GLM 5V Turbo *(new)* |
 
 ---
 
@@ -297,20 +311,19 @@ In settings, configure:
 ### Direct HTTP Mode (`main.js`)
 
 ```
-┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  API Client │────>│  server-direct   │────>│  chat.z.ai      │
-│  (Roo/curl) │     │  HMAC-signed     │     │  REST API       │
-└─────────────┘     │  HTTP requests   │     └─────────────────┘
-                    └──────────────────┘
+┌─────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│  API Client │────▶│  main.js             │────▶│  chat.z.ai      │
+│  (Roo/curl) │     │  HMAC-signed HTTP    │     │  REST API       │
+└─────────────┘     └──────────────────────┘     └─────────────────┘
 ```
 
 ### Browser Automation Mode (`browser.js`)
 
 ```
-┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  API Client │────>│  browser.js      │<WS> │  Browser Tab    │
-│  (Roo/curl) │     │  WebSocket pool  │     │  (chat.z.ai)    │
-└─────────────┘     └──────────────────┘     └─────────────────┘
+┌─────────────┐     ┌──────────────────────┐  WS  ┌─────────────────┐
+│  API Client │────▶│  browser.js          │◀────▶│  Browser Tab    │
+│  (Roo/curl) │     │  WebSocket pool      │      │  (chat.z.ai)    │
+└─────────────┘     └──────────────────────┘      └─────────────────┘
 ```
 
 ---
@@ -320,7 +333,7 @@ In settings, configure:
 | File | Description |
 |------|-------------|
 | `main.js` | Direct HTTP server — no browser required |
-| `browser.js` | Browser automation server  |
+| `browser.js` | Browser automation server *(deprecated)* |
 | `config.js` | Shared configuration |
 | `src/pool.js` | Browser client pool *(Browser mode only)* |
 | `src/injection.js` | Browser injection script *(Browser mode only)* |
