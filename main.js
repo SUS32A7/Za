@@ -1335,7 +1335,7 @@ app.post("/v1/messages", authMiddleware, async (req, res) => {
 // ============================================================
 
 const knownModels = [
-  "glm-4.7", "glm-5", "GLM-5-Turbo", "z1", "z1-mini",
+  "glm-4.7", "glm-5", "GLM-5-Turbo", "GLM-5v-Turbo", "z1-mini",
   // Also advertise Anthropic model names so Claude Code's model probe passes
   "claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001",
 ];
