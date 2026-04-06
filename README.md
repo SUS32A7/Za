@@ -134,7 +134,7 @@ Configure via environment variables or `config.js`:
 |----------|---------|-------------|
 | `PORT` | `3001` | Server port |
 | `HOST` | `0.0.0.0` | Server host |
-| `AUTH_TOKEN` | `ZaiProxy2024` | API authentication token |
+| `AUTH_TOKEN` | `Waguri` | API authentication token |
 | `TIMEOUT` | `120000` | Default request timeout (ms) |
 | `ROTATION_STRATEGY` | `lru` | Client rotation strategy: `lru`, `round-robin`, `random` *(Browser mode)* |
 | `RATE_LIMIT_COOLDOWN` | `300000` | Rate limit cooldown in ms *(Browser mode)* |
