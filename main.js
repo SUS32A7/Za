@@ -1,129 +1,218 @@
 "use strict";
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  Z.AI UNIVERSAL BRIDGE — Full OpenAI + Anthropic API Compatible Server
+// ══════════════════════════════════════════════════════════════════════════════
+
 const express = require("express");
 const http = require("http");
 const crypto = require("crypto");
-const config = require("./config");
+
+// ─── CONFIG (inline defaults — override via env or config.js) ────────────────
+let config;
+try {
+  config = require("./config");
+} catch {
+  config = {
+    server: { port: parseInt(process.env.PORT || "3000"), host: "0.0.0.0" },
+    auth: { enabled: true, token: process.env.AUTH_TOKEN || "sk-zai-bridge-token" },
+  };
+}
 
 const app = express();
 const server = http.createServer(app);
 
-// ============== Z.AI DIRECT CONFIG ==============
+// ═════════════════════════════════════════════════════════════════════════════
+//  CONSTANTS
+// ═════════════════════════════════════════════════════════════════════════════
 
-const BASE_URL = "https://chat.z.ai";
+const BASE_URL              = "https://chat.z.ai";
+const SALT_KEY              = "key-@@@@)))()((9))-xxxx&&&%%%%%";
+const DEFAULT_FE_VERSION    = "prod-fe-1.0.185";
 const INCLUDE_CORE_INSTRUCTIONS = false;
-const SALT_KEY = "key-@@@@)))()((9))-xxxx&&&%%%%%";
-const DEFAULT_FE_VERSION = "prod-fe-1.0.185";
 
-// ============== SESSION STATE ==============
-
-const session = {
-  token: "",
-  userId: "",
-  userName: "Guest",
-  chatId: crypto.randomUUID(),
-  messages: [],
-  saltKey: SALT_KEY,
-  feVersion: DEFAULT_FE_VERSION,
-  features: {
-    webSearch: false,
-    autoWebSearch: false,
-    thinking: false,
-    imageGen: false,
-    previewMode: false,
-  },
-  initialized: false,
-  initializing: false,
+// Anthropic ↔ Z.AI model map
+const ANTHROPIC_MODEL_MAP = {
+  "claude-opus-4-6":             "GLM-5-Turbo",
+  "claude-opus-4-5":             "GLM-5-Turbo",
+  "claude-opus-3-5":             "GLM-5-Turbo",
+  "claude-3-opus-20240229":      "GLM-5-Turbo",
+  "claude-3-5-sonnet-20241022":  "glm-5",
+  "claude-3-5-sonnet-20240620":  "glm-5",
+  "claude-sonnet-4-6":           "glm-5",
+  "claude-sonnet-4-5":           "glm-5",
+  "claude-haiku-4-5-20251001":   "glm-5",
+  "claude-3-haiku-20240307":     "glm-5",
+  "claude-3-5-haiku-20241022":   "glm-5",
 };
+
+// OpenAI ↔ Z.AI model map
+const OPENAI_MODEL_MAP = {
+  "gpt-4o":          "glm-5",
+  "gpt-4o-mini":     "glm-5",
+  "gpt-4-turbo":     "GLM-5-Turbo",
+  "gpt-4":           "GLM-5-Turbo",
+  "gpt-3.5-turbo":   "glm-5",
+  "o1":              "GLM-5-Turbo",
+  "o1-mini":         "glm-5",
+  "o3-mini":         "glm-5",
+};
+
+const KNOWN_MODELS = [
+  // Z.AI native
+  "glm-4.7", "glm-5", "GLM-5-Turbo", "GLM-5v-Turbo", "z1-mini",
+  // Anthropic aliases
+  "claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001",
+  "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307",
+  "claude-3-5-haiku-20241022",
+  // OpenAI aliases
+  "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo",
+  "o1", "o1-mini", "o3-mini",
+];
+
+const ROO_CLINE_TOOLS = [
+  "write_file","read_file","apply_diff","execute_command","list_files","search_files",
+  "ask_followup_question","attempt_completion","browser_action","update_todo_list",
+  "switch_mode","new_task","fetch_instructions","delete_file","read_multiple_files",
+  "write_multiple_files","search_and_replace","write_to_file","read_from_file",
+  "list_directory","execute_shell","run_command","create_file","edit_file",
+  "replace_in_file","insert_code","delete_code","move_file","copy_file","rename_file",
+  "search_code","find_files","grep_search","ask_question","complete_task","finish_task",
+  "submit_result","write","read","edit","bash","glob","grep","task","webfetch",
+  "todowrite","todoread","skill","Write","Read","Edit","Bash","Glob","Grep","Task",
+  "WebFetch","TodoWrite","TodoRead","Skill","AskUserQuestion",
+];
 
 const CORE_INSTRUCTIONS = `CRITICAL INSTRUCTIONS (ALWAYS FOLLOW):
 1. When using tools, ALWAYS output tool calls in XML format like: <tool_call><function=name><parameter=key>value</parameter></function></tool_call>
    NEVER use JSON or markdown code blocks for tool calls.
 2. Follow every instruction in the prompt deeply and thoroughly. Execute tasks completely.
-3. Also One rule only applies if my prompt includes this string "You are Roo" if it does then when changing modes with function switch_mode function toolcall dont ever forget parameter mode_slug or else it will likely fail and heres the tool usage for making todo list use it when doing complex task etc
- <update_todo_list>
-<todos>
-- [ ] Create a .test file with content "im good"
-- [ ] Read C:\\key.txt and display its contents
-</todos>
-</update_todo_list> this is only a example of tool usage if my Prompt doesnt includes You are Roo then ignore This rule
-4. When using attempt_completion, ALWAYS use <parameter=result> - NEVER use <parameter=message> or <parameter=summary>. The parameter MUST be named "result".`;
+3. When using attempt_completion, ALWAYS use <parameter=result> - NEVER use <parameter=message> or <parameter=summary>.`;
 
-// ============== MIDDLEWARE ==============
+// ═════════════════════════════════════════════════════════════════════════════
+//  SESSION STATE
+// ═════════════════════════════════════════════════════════════════════════════
+
+const session = {
+  token:        "",
+  userId:       "",
+  userName:     "Guest",
+  chatId:       crypto.randomUUID(),
+  messages:     [],
+  saltKey:      SALT_KEY,
+  feVersion:    DEFAULT_FE_VERSION,
+  features: {
+    webSearch:    false,
+    autoWebSearch:false,
+    thinking:     false,
+    imageGen:     false,
+    previewMode:  false,
+  },
+  initialized:  false,
+  initializing: false,
+  stats: {
+    totalRequests:  0,
+    openaiRequests: 0,
+    anthropicRequests: 0,
+    errors:         0,
+    startTime:      Date.now(),
+  },
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  MIDDLEWARE
+// ═════════════════════════════════════════════════════════════════════════════
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-Id, X-Fresh-Session, anthropic-version, anthropic-beta");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", [
+    "Content-Type", "Authorization", "X-Session-Id", "X-Fresh-Session",
+    "anthropic-version", "anthropic-beta", "x-api-key", "OpenAI-Organization",
+    "OpenAI-Beta",
+  ].join(", "));
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
 
 app.use(express.json({ limit: "50mb" }));
 
+// Request logger
+app.use((req, res, next) => {
+  if (req.path !== "/status" && req.path !== "/admin/health") {
+    const type = req.path.startsWith("/v1/messages") ? "ANT" :
+                 req.path.startsWith("/v1/chat")     ? "OAI" : "SYS";
+    console.log(`[${type}] ${req.method} ${req.path}`);
+  }
+  next();
+});
+
 function authMiddleware(req, res, next) {
   if (!config.auth.enabled) return next();
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace(/^Bearer\s+/i, "").replace(/^x-api-key\s+/i, "");
-  // Also accept x-api-key header (Anthropic SDK style)
-  const apiKey = req.headers["x-api-key"];
-  const provided = token || apiKey;
+  const authHeader  = req.headers.authorization || "";
+  const apiKey      = req.headers["x-api-key"] || "";
+  const token       = authHeader.replace(/^Bearer\s+/i, "").replace(/^x-api-key\s+/i, "");
+  const provided    = token || apiKey;
   if (provided !== config.auth.token) {
     return res.status(401).json({
       type: "error",
-      error: { type: "authentication_error", message: "Invalid or missing authentication token" }
+      error: { type: "authentication_error", message: "Invalid or missing authentication token" },
     });
   }
   next();
 }
 
-// ============== UTILITY FUNCTIONS ==============
+// ═════════════════════════════════════════════════════════════════════════════
+//  UTILITY HELPERS
+// ═════════════════════════════════════════════════════════════════════════════
 
-function generateId() {
-  return crypto.randomBytes(16).toString("hex");
+const generateId = () => crypto.randomBytes(16).toString("hex");
+const estimateTokens = (t) => !t ? 0 : Math.ceil((typeof t === "string" ? t : JSON.stringify(t)).length / 4);
+
+function resolveZaiModel(modelName) {
+  if (!modelName) return "glm-5";
+  const m = modelName.toLowerCase();
+  if (ANTHROPIC_MODEL_MAP[modelName]) return ANTHROPIC_MODEL_MAP[modelName];
+  if (OPENAI_MODEL_MAP[modelName])    return OPENAI_MODEL_MAP[modelName];
+  // fuzzy
+  if (m.includes("opus") || m.includes("turbo") || m.includes("o1") || m.includes("gpt-4")) return "GLM-5-Turbo";
+  if (m.includes("glm"))  return modelName; // pass through native
+  return "glm-5";
 }
 
-function estimateTokens(text) {
-  if (!text) return 0;
-  return Math.ceil(text.length / 4);
-}
+// ─── Content extraction helpers ──────────────────────────────────────────────
 
-function getMessageContent(content) {
+function extractTextFromContent(content) {
   if (!content) return "";
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content
-      .filter(part => part.type === "text" || part.type === "tool_result" || typeof part === "string")
-      .map(part => {
-        if (typeof part === "string") return part;
-        if (part.type === "tool_result") {
-          const inner = Array.isArray(part.content)
-            ? part.content.map(c => c.text || "").join("\n")
-            : (part.content || "");
-          return `Tool Result (${part.tool_use_id}): ${inner}`;
-        }
-        return part.text || "";
-      })
-      .join("\n");
+    return content.map(p => {
+      if (typeof p === "string") return p;
+      if (p.type === "text") return p.text || "";
+      if (p.type === "tool_result") {
+        const inner = Array.isArray(p.content)
+          ? p.content.map(c => c.text || "").join("\n")
+          : (p.content || "");
+        return `[Tool Result for ${p.tool_use_id}]: ${inner}`;
+      }
+      if (p.type === "image") return "[IMAGE]";
+      return "";
+    }).filter(Boolean).join("\n");
   }
   return String(content);
 }
 
-// ── Convert Anthropic messages format → flat prompt string ──
-function anthropicMessagesToPrompt(messages, systemPrompt, includeToolInstructions = true) {
-  let prompt = "";
+// ─── Anthropic messages → flat prompt ────────────────────────────────────────
 
-  if (includeToolInstructions && INCLUDE_CORE_INSTRUCTIONS) {
-    prompt += `${CORE_INSTRUCTIONS}\n\n`;
-  }
+function anthropicMessagesToPrompt(messages, systemPrompt) {
+  let prompt = "";
+  if (INCLUDE_CORE_INSTRUCTIONS) prompt += CORE_INSTRUCTIONS + "\n\n";
 
   if (systemPrompt) {
-    const sysText = typeof systemPrompt === "string"
+    const sys = typeof systemPrompt === "string"
       ? systemPrompt
-      : Array.isArray(systemPrompt)
-        ? systemPrompt.map(b => b.text || "").join("\n")
-        : String(systemPrompt);
-    prompt += `System: ${sysText}\n\n`;
+      : Array.isArray(systemPrompt) ? systemPrompt.map(b => b.text || "").join("\n") : String(systemPrompt);
+    prompt += `System: ${sys}\n\n`;
   }
 
   for (const msg of messages) {
@@ -131,37 +220,32 @@ function anthropicMessagesToPrompt(messages, systemPrompt, includeToolInstructio
     const content = msg.content;
 
     if (role === "user") {
-      // Handle array content (may include tool_result blocks)
       if (Array.isArray(content)) {
-        const textParts = [];
-        for (const part of content) {
-          if (part.type === "text") {
-            textParts.push(part.text);
-          } else if (part.type === "tool_result") {
-            const inner = Array.isArray(part.content)
-              ? part.content.map(c => c.text || "").join("\n")
-              : (part.content || "");
-            textParts.push(`[Tool Result for ${part.tool_use_id}]: ${inner}`);
+        const parts = content.map(p => {
+          if (p.type === "text") return p.text;
+          if (p.type === "tool_result") {
+            const inner = Array.isArray(p.content)
+              ? p.content.map(c => c.text || "").join("\n")
+              : (p.content || "");
+            return `[Tool Result for ${p.tool_use_id}]: ${inner}`;
           }
-        }
-        prompt += `User: ${textParts.join("\n")}\n\n`;
+          if (p.type === "image") return "[User provided an image]";
+          return "";
+        }).filter(Boolean);
+        prompt += `User: ${parts.join("\n")}\n\n`;
       } else {
-        prompt += `User: ${getMessageContent(content)}\n\n`;
+        prompt += `User: ${extractTextFromContent(content)}\n\n`;
       }
     } else if (role === "assistant") {
-      // Handle array content (may include tool_use blocks)
       if (Array.isArray(content)) {
-        const textParts = [];
-        for (const part of content) {
-          if (part.type === "text") {
-            textParts.push(part.text);
-          } else if (part.type === "tool_use") {
-            textParts.push(`[Tool Call: ${part.name}(${JSON.stringify(part.input)})]`);
-          }
-        }
-        prompt += `Assistant: ${textParts.join("\n")}\n\n`;
+        const parts = content.map(p => {
+          if (p.type === "text") return p.text;
+          if (p.type === "tool_use") return `[Tool Call: ${p.name}(${JSON.stringify(p.input)})]`;
+          return "";
+        }).filter(Boolean);
+        prompt += `Assistant: ${parts.join("\n")}\n\n`;
       } else {
-        prompt += `Assistant: ${getMessageContent(content)}\n\n`;
+        prompt += `Assistant: ${extractTextFromContent(content)}\n\n`;
       }
     }
   }
@@ -169,49 +253,56 @@ function anthropicMessagesToPrompt(messages, systemPrompt, includeToolInstructio
   return prompt.trim();
 }
 
-// Legacy OpenAI format → prompt (kept for /v1/chat/completions)
-function messagesToPrompt(messages, includeToolInstructions = true) {
-  if (!Array.isArray(messages)) return messages;
+// ─── OpenAI messages → flat prompt ───────────────────────────────────────────
 
+function openaiMessagesToPrompt(messages) {
+  if (!Array.isArray(messages)) return String(messages);
   let systemMsg = null;
-  const conversation = [];
-
-  for (const msg of messages) {
-    if (msg.role === "system") {
-      systemMsg = getMessageContent(msg.content);
-    } else {
-      conversation.push(msg);
-    }
+  const convo = [];
+  for (const m of messages) {
+    if (m.role === "system") systemMsg = extractTextFromContent(m.content);
+    else convo.push(m);
   }
-
   let prompt = "";
-  if (includeToolInstructions && INCLUDE_CORE_INSTRUCTIONS) prompt += `${CORE_INSTRUCTIONS}\n\n`;
+  if (INCLUDE_CORE_INSTRUCTIONS) prompt += CORE_INSTRUCTIONS + "\n\n";
   if (systemMsg) prompt += `System: ${systemMsg}\n\n`;
-
-  for (const msg of conversation) {
-    const role = msg.role || "user";
-    const content = getMessageContent(msg.content);
-    if (role === "user") prompt += `User: ${content}\n\n`;
-    else if (role === "assistant") prompt += `Assistant: ${content}\n\n`;
-    else if (role === "tool") prompt += `Tool Result: ${content}\n\n`;
+  for (const m of convo) {
+    const role = m.role || "user";
+    const text = extractTextFromContent(m.content);
+    if (role === "user")       prompt += `User: ${text}\n\n`;
+    else if (role === "assistant") {
+      if (m.tool_calls?.length) {
+        const tc = m.tool_calls.map(t => `[Tool Call: ${t.function?.name}(${t.function?.arguments})]`).join("\n");
+        prompt += `Assistant: ${text ? text + "\n" : ""}${tc}\n\n`;
+      } else {
+        prompt += `Assistant: ${text}\n\n`;
+      }
+    }
+    else if (role === "tool") prompt += `Tool Result (${m.tool_call_id}): ${text}\n\n`;
+    else if (role === "function") prompt += `Function Result (${m.name}): ${text}\n\n`;
   }
-
   return prompt.trim();
 }
 
-// ── Tool call parsers (unchanged from original) ──
+// ═════════════════════════════════════════════════════════════════════════════
+//  TOOL CALL PARSING
+// ═════════════════════════════════════════════════════════════════════════════
 
 function parseToolCalls(content) {
+  if (!content) return [];
   const toolCalls = [];
-  content = content.replace(/<tool_call>([a-zA-Z_][a-zA-Z0-9_]*)>/gi, "<$1>");
-  const markdownJsonPattern = /```(?:json)?\s*\n?\s*(\{[\s\S]*?\})\s*\n?```/gi;
   let match;
 
-  while ((match = markdownJsonPattern.exec(content)) !== null) {
+  // Fix malformed <tool_call>name> → <name>
+  content = content.replace(/<tool_call>([a-zA-Z_][a-zA-Z0-9_]*)>/gi, "<$1>");
+
+  // ── Markdown JSON blocks ──────────────────────────────────────────────────
+  const mdJsonRe = /```(?:json)?\s*\n?\s*(\{[\s\S]*?\})\s*\n?```/gi;
+  while ((match = mdJsonRe.exec(content)) !== null) {
     try {
-      const jsonData = JSON.parse(match[1]);
-      if (jsonData.tool_calls && Array.isArray(jsonData.tool_calls)) {
-        for (const tc of jsonData.tool_calls) {
+      const d = JSON.parse(match[1]);
+      if (d.tool_calls && Array.isArray(d.tool_calls)) {
+        for (const tc of d.tool_calls) {
           toolCalls.push({
             id: tc.id || `call_${generateId().substring(0, 24)}`,
             type: "function",
@@ -219,181 +310,145 @@ function parseToolCalls(content) {
               name: tc.function?.name || tc.name,
               arguments: typeof tc.function?.arguments === "string"
                 ? tc.function.arguments
-                : JSON.stringify(tc.function?.arguments || tc.arguments || tc.parameters || {})
-            }
+                : JSON.stringify(tc.function?.arguments || tc.arguments || {}),
+            },
           });
         }
-      } else if (jsonData.name || jsonData.function) {
+      } else if (d.name || d.function) {
         toolCalls.push({
           id: `call_${generateId().substring(0, 24)}`,
           type: "function",
           function: {
-            name: jsonData.name || jsonData.function,
-            arguments: typeof jsonData.arguments === "string"
-              ? jsonData.arguments
-              : JSON.stringify(jsonData.arguments || jsonData.parameters || {})
-          }
+            name: d.name || d.function,
+            arguments: typeof d.arguments === "string" ? d.arguments : JSON.stringify(d.arguments || {}),
+          },
         });
       }
-    } catch (e) {}
+    } catch {}
   }
 
-  const xmlPattern = /<tool_call>\s*<function=([^>]+)>([\s\S]*?)<\/function>\s*<\/tool_call>/gi;
-  while ((match = xmlPattern.exec(content)) !== null) {
-    const funcName = match[1].trim();
-    const paramsBlock = match[2];
-    const params = {};
-    const paramPattern = /<parameter=([^>]+)>\s*([\s\S]*?)\s*<\/parameter>/gi;
-    let paramMatch;
-    while ((paramMatch = paramPattern.exec(paramsBlock)) !== null) {
-      let paramValue = paramMatch[2].trim();
-      try { paramValue = JSON.parse(paramValue); } catch (e) {}
-      params[paramMatch[1].trim()] = paramValue;
-    }
+  // ── XML <tool_call><function=name>…</function></tool_call> ────────────────
+  const xmlTcRe = /<tool_call>\s*<function=([^>]+)>([\s\S]*?)<\/function>\s*<\/tool_call>/gi;
+  while ((match = xmlTcRe.exec(content)) !== null) {
+    const name = match[1].trim();
+    const params = parseXmlParams(match[2]);
     toolCalls.push({
       id: `call_${generateId().substring(0, 24)}`,
       type: "function",
-      function: { name: funcName, arguments: JSON.stringify(params) }
+      function: { name, arguments: JSON.stringify(params) },
     });
   }
 
-  const jsonPattern = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/gi;
-  while ((match = jsonPattern.exec(content)) !== null) {
+  // ── JSON <tool_call>{…}</tool_call> ──────────────────────────────────────
+  const jsonTcRe = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/gi;
+  while ((match = jsonTcRe.exec(content)) !== null) {
     try {
-      const toolData = JSON.parse(match[1]);
-      if (toolData.name || toolData.function) {
+      const d = JSON.parse(match[1]);
+      if (d.name || d.function) {
         toolCalls.push({
           id: `call_${generateId().substring(0, 24)}`,
           type: "function",
           function: {
-            name: toolData.name || toolData.function,
-            arguments: typeof toolData.arguments === "string"
-              ? toolData.arguments
-              : JSON.stringify(toolData.arguments || toolData.parameters || {})
-          }
+            name: d.name || d.function,
+            arguments: typeof d.arguments === "string" ? d.arguments : JSON.stringify(d.arguments || {}),
+          },
         });
       }
-    } catch (e) {}
+    } catch {}
   }
 
-  const rooClineTools = [
-    "write_file","read_file","apply_diff","execute_command","list_files","search_files",
-    "ask_followup_question","attempt_completion","browser_action","update_todo_list",
-    "switch_mode","new_task","fetch_instructions","delete_file","read_multiple_files",
-    "write_multiple_files","search_and_replace","write_to_file","read_from_file",
-    "list_directory","execute_shell","run_command","create_file","edit_file",
-    "replace_in_file","insert_code","delete_code","move_file","copy_file","rename_file",
-    "search_code","find_files","grep_search","ask_question","complete_task","finish_task",
-    "submit_result","write","read","edit","bash","glob","grep","task","webfetch",
-    "todowrite","todoread","skill","Write","Read","Edit","Bash","Glob","Grep","Task",
-    "WebFetch","TodoWrite","TodoRead","Skill","AskUserQuestion"
-  ];
-
-  for (const toolName of rooClineTools) {
-    const toolPattern = new RegExp("<" + toolName + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + toolName + ">", "gi");
-    while ((match = toolPattern.exec(content)) !== null) {
-      const innerContent = match[1];
-      const params = {};
-      const paramPattern = /<([a-z_]+)>([\s\S]*?)<\/\1>/gi;
-      let paramMatch;
-      while ((paramMatch = paramPattern.exec(innerContent)) !== null) {
-        params[paramMatch[1]] = paramMatch[2];
-      }
-      if (toolName === "attempt_completion" && !params.result) {
-        const textContent = innerContent.replace(/<[^>]*>/g, "").trim();
-        params.result = textContent || "Task completed successfully.";
-      }
-      const toolNameLower = toolName.toLowerCase();
-      for (const t of ["write","read","edit"]) {
-        if (toolNameLower === t) {
-          if (params.filePath && !params.file_path) { params.file_path = params.filePath; delete params.filePath; }
-          if (params.path && !params.file_path) { params.file_path = params.path; delete params.path; }
-          if (params.file && !params.file_path) { params.file_path = params.file; delete params.file; }
-        }
-      }
-      if (toolNameLower === "bash" && !params.description && params.command) params.description = "Execute command";
-      if (toolNameLower === "todowrite" && params.todos && typeof params.todos === "string") {
-        try { params.todos = JSON.parse(params.todos); } catch (e) {}
-      }
-      if (Object.keys(params).length > 0 || ["list_files"].includes(toolName)) {
+  // ── Roo/Cline tool XML tags ───────────────────────────────────────────────
+  for (const toolName of ROO_CLINE_TOOLS) {
+    const re = new RegExp(`<${toolName}(?:\\s[^>]*)?>([\\s\\S]*?)</${toolName}>`, "gi");
+    while ((match = re.exec(content)) !== null) {
+      const params = parseXmlParams(match[1]);
+      // Fix common alias issues
+      normalizeToolParams(toolName.toLowerCase(), params);
+      if (Object.keys(params).length > 0 || toolName === "list_files") {
         toolCalls.push({
           id: `call_${generateId().substring(0, 24)}`,
           type: "function",
-          function: { name: toolName, arguments: JSON.stringify(params) }
+          function: { name: toolName, arguments: JSON.stringify(params) },
         });
       }
     }
   }
 
-  const unclosedFuncPattern = /<function=([a-z_]+)>([\s\S]*?)(?=<function=|$)/gi;
-  while ((match = unclosedFuncPattern.exec(content)) !== null) {
-    const funcName = match[1].trim();
-    const paramsBlock = match[2];
+  // ── Unclosed <function=name>…<parameter=x>v ──────────────────────────────
+  const unclosedFnRe = /<function=([a-z_]+)>([\s\S]*?)(?=<function=|$)/gi;
+  while ((match = unclosedFnRe.exec(content)) !== null) {
+    const name = match[1].trim();
     const params = {};
-    const unclosedParamPattern = /<parameter=([a-z_]+)>([\s\S]*?)(?=<parameter=|<function=|$)/gi;
-    let paramMatch;
-    while ((paramMatch = unclosedParamPattern.exec(paramsBlock)) !== null) {
-      params[paramMatch[1].trim()] = paramMatch[2].trim();
-    }
-    if (funcName === "attempt_completion" && !params.result) {
-      params.result = params.summary || params.message || "Task completed successfully.";
-      delete params.summary; delete params.message;
-    }
-    if (Object.keys(params).length > 0) {
+    const pRe = /<parameter=([a-z_]+)>([\s\S]*?)(?=<parameter=|<function=|$)/gi;
+    let pm;
+    while ((pm = pRe.exec(match[2])) !== null) params[pm[1].trim()] = pm[2].trim();
+    if (name === "attempt_completion" && !params.result)
+      params.result = params.summary || params.message || "Task completed.";
+    delete params.summary; delete params.message;
+    if (Object.keys(params).length > 0)
       toolCalls.push({
         id: `call_${generateId().substring(0, 24)}`,
         type: "function",
-        function: { name: funcName, arguments: JSON.stringify(params) }
+        function: { name, arguments: JSON.stringify(params) },
       });
-    }
   }
 
   return toolCalls;
 }
 
-function removeToolCallsFromContent(content) {
-  let cleaned = content;
-  cleaned = cleaned.replace(/<tool_call>([a-zA-Z_][a-zA-Z0-9_]*)>[\s\S]*?<\/\1>/gi, "");
-  cleaned = cleaned.replace(/<tool_call>([a-zA-Z_][a-zA-Z0-9_]*)>[\s\S]*?(?=<tool_call>|$)/gi, "");
-  cleaned = cleaned.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "");
-
-  const rooClineTools = [
-    "write_file","read_file","apply_diff","execute_command","list_files","search_files",
-    "ask_followup_question","attempt_completion","browser_action","update_todo_list",
-    "switch_mode","new_task","fetch_instructions","delete_file","read_multiple_files",
-    "write_multiple_files","search_and_replace","write_to_file","read_from_file",
-    "list_directory","execute_shell","run_command","create_file","edit_file",
-    "replace_in_file","insert_code","delete_code","move_file","copy_file","rename_file",
-    "search_code","find_files","grep_search","ask_question","complete_task","finish_task",
-    "submit_result","write","read","edit","bash","glob","grep","task","webfetch",
-    "todowrite","todoread","skill","Write","Read","Edit","Bash","Glob","Grep","Task",
-    "WebFetch","TodoWrite","TodoRead","Skill","AskUserQuestion"
-  ];
-
-  for (const toolName of rooClineTools) {
-    const pattern = new RegExp("<" + toolName + "(?:\\s[^>]*)?>[\\s\\S]*?</" + toolName + ">", "gi");
-    cleaned = cleaned.replace(pattern, "");
+function parseXmlParams(block) {
+  const params = {};
+  const re = /<([a-zA-Z_][a-zA-Z0-9_]*)>([\s\S]*?)<\/\1>/g;
+  let m;
+  while ((m = re.exec(block)) !== null) {
+    let val = m[2].trim();
+    try { val = JSON.parse(val); } catch {}
+    params[m[1]] = val;
   }
+  return params;
+}
 
-  cleaned = cleaned.replace(/<function=[a-z_]+>[\s\S]*$/gi, "");
-  cleaned = cleaned.replace(/```(?:json)?\s*\n?\s*\{[\s\S]*?"(?:name|tool_calls)"[\s\S]*?\}\s*\n?```/gi, "");
-  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
-  return cleaned;
+function normalizeToolParams(name, params) {
+  if (["write","read","edit"].includes(name)) {
+    if (params.filePath && !params.file_path)   { params.file_path = params.filePath; delete params.filePath; }
+    if (params.path     && !params.file_path)   { params.file_path = params.path;     delete params.path; }
+    if (params.file     && !params.file_path)   { params.file_path = params.file;     delete params.file; }
+  }
+  if (name === "bash" && !params.description && params.command) params.description = "Execute command";
+  if (name === "todowrite" && params.todos && typeof params.todos === "string") {
+    try { params.todos = JSON.parse(params.todos); } catch {}
+  }
+  if (name === "attempt_completion" && !params.result) {
+    const raw = Object.values(params).join(" ").trim();
+    params.result = raw || "Task completed successfully.";
+  }
+}
+
+function removeToolCallsFromContent(content) {
+  if (!content) return "";
+  let c = content;
+  c = c.replace(/<tool_call>([a-zA-Z_][a-zA-Z0-9_]*)>[\s\S]*?<\/\1>/gi, "");
+  c = c.replace(/<tool_call>([a-zA-Z_][a-zA-Z0-9_]*)>[\s\S]*?(?=<tool_call>|$)/gi, "");
+  c = c.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "");
+  for (const t of ROO_CLINE_TOOLS) {
+    c = c.replace(new RegExp(`<${t}(?:\\s[^>]*)?>[\\s\\S]*?</${t}>`, "gi"), "");
+  }
+  c = c.replace(/<function=[a-z_]+>[\s\S]*$/gi, "");
+  c = c.replace(/```(?:json)?\s*\n?\s*\{[\s\S]*?"(?:name|tool_calls)"[\s\S]*?\}\s*\n?```/gi, "");
+  c = c.replace(/\n{3,}/g, "\n\n").trim();
+  return c;
 }
 
 function hasIncompleteToolCall(content) {
-  const patterns = [
+  const checks = [
     /<tool_call>(?![\s\S]*<\/tool_call>)/i,
     /<function=[^>]+>(?![\s\S]*<\/function>)/i,
     /<write_file>(?![\s\S]*<\/write_file>)/i,
     /<write_to_file>(?![\s\S]*<\/write_to_file>)/i,
     /<read_file>(?![\s\S]*<\/read_file>)/i,
-    /<read_from_file>(?![\s\S]*<\/read_from_file>)/i,
     /<apply_diff>(?![\s\S]*<\/apply_diff>)/i,
     /<execute_command>(?![\s\S]*<\/execute_command>)/i,
-    /<run_command>(?![\s\S]*<\/run_command>)/i,
     /<attempt_completion>(?![\s\S]*<\/attempt_completion>)/i,
-    /<complete_task>(?![\s\S]*<\/complete_task>)/i,
     /<edit_file>(?![\s\S]*<\/edit_file>)/i,
     /<replace_in_file>(?![\s\S]*<\/replace_in_file>)/i,
     /```(?:json)?\s*\n?\s*\{[^}]*$/i,
@@ -401,70 +456,36 @@ function hasIncompleteToolCall(content) {
     /<read>(?![\s\S]*<\/read>)/i,
     /<edit>(?![\s\S]*<\/edit>)/i,
     /<bash>(?![\s\S]*<\/bash>)/i,
-    /<glob>(?![\s\S]*<\/glob>)/i,
-    /<grep>(?![\s\S]*<\/grep>)/i,
-    /<task>(?![\s\S]*<\/task>)/i,
-    /<Write>(?![\s\S]*<\/Write>)/,
-    /<Read>(?![\s\S]*<\/Read>)/,
-    /<Edit>(?![\s\S]*<\/Edit>)/,
-    /<Bash>(?![\s\S]*<\/Bash>)/,
-    /<Glob>(?![\s\S]*<\/Glob>)/,
-    /<Grep>(?![\s\S]*<\/Grep>)/,
     /<Task>(?![\s\S]*<\/Task>)/,
     /<TodoWrite>(?![\s\S]*<\/TodoWrite>)/,
     /<AskUserQuestion>(?![\s\S]*<\/AskUserQuestion>)/,
-    /<tool_call>[A-Za-z]+>(?![\s\S]*<\/[A-Za-z]+>)/,
   ];
-  for (const p of patterns) if (p.test(content)) return true;
-  return false;
+  return checks.some(p => p.test(content));
 }
 
-// ============================================================
-// ── FORMAT HELPERS ──────────────────────────────────────────
-// ============================================================
+// ═════════════════════════════════════════════════════════════════════════════
+//  RESPONSE FORMATTERS — ANTHROPIC
+// ═════════════════════════════════════════════════════════════════════════════
 
-// ── Anthropic /v1/messages format ──
-
-/**
- * Convert parsed tool calls (OpenAI style) → Anthropic tool_use content blocks
- */
 function toolCallsToAnthropicBlocks(toolCalls) {
   return toolCalls.map(tc => ({
     type: "tool_use",
     id: tc.id || `toolu_${generateId().substring(0, 24)}`,
     name: tc.function.name,
-    input: (() => {
-      try { return JSON.parse(tc.function.arguments); }
-      catch (e) { return { raw: tc.function.arguments }; }
-    })()
+    input: (() => { try { return JSON.parse(tc.function.arguments); } catch { return { raw: tc.function.arguments }; } })(),
   }));
 }
 
-/**
- * Build a full non-streaming Anthropic response object
- */
 function formatAnthropicResponse(fullContent, model, requestId) {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const msgId = `msg_${requestId}`;
-  const toolCalls = parseToolCalls(fullContent);
-  const cleanText = toolCalls.length > 0 ? removeToolCallsFromContent(fullContent) : fullContent;
-
+  const toolCalls   = parseToolCalls(fullContent);
+  const cleanText   = toolCalls.length > 0 ? removeToolCallsFromContent(fullContent) : fullContent;
   const contentBlocks = [];
-
-  if (cleanText && cleanText.trim()) {
-    contentBlocks.push({ type: "text", text: cleanText });
-  }
-
-  if (toolCalls.length > 0) {
-    contentBlocks.push(...toolCallsToAnthropicBlocks(toolCalls));
-  }
-
-  if (contentBlocks.length === 0) {
-    contentBlocks.push({ type: "text", text: "" });
-  }
+  if (cleanText?.trim()) contentBlocks.push({ type: "text", text: cleanText });
+  if (toolCalls.length)  contentBlocks.push(...toolCallsToAnthropicBlocks(toolCalls));
+  if (!contentBlocks.length) contentBlocks.push({ type: "text", text: "" });
 
   return {
-    id: msgId,
+    id: `msg_${requestId}`,
     type: "message",
     role: "assistant",
     model: model || "claude-sonnet-4-6",
@@ -472,294 +493,143 @@ function formatAnthropicResponse(fullContent, model, requestId) {
     stop_reason: toolCalls.length > 0 ? "tool_use" : "end_turn",
     stop_sequence: null,
     usage: {
-      input_tokens: estimateTokens(fullContent),
+      input_tokens:  estimateTokens(fullContent),
       output_tokens: estimateTokens(fullContent),
-    }
+    },
   };
-}
-
-/**
- * Build SSE event string
- */
-function sseEvent(event, data) {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-}
-
-/**
- * Stream Anthropic SSE events for a given full content string (called once at end)
- * For true streaming, we send deltas as they arrive — see the route handler.
- */
-function buildAnthropicStreamEvents(fullContent, model, requestId, inputTokens) {
-  const msgId = `msg_${requestId}`;
-  const toolCalls = parseToolCalls(fullContent);
-  const cleanText = toolCalls.length > 0 ? removeToolCallsFromContent(fullContent) : fullContent;
-
-  const events = [];
-
-  // message_start
-  events.push(sseEvent("message_start", {
-    type: "message_start",
-    message: {
-      id: msgId,
-      type: "message",
-      role: "assistant",
-      model: model || "claude-sonnet-4-6",
-      content: [],
-      stop_reason: null,
-      stop_sequence: null,
-      usage: { input_tokens: inputTokens, output_tokens: 0 }
-    }
-  }));
-
-  let blockIndex = 0;
-
-  // Text block
-  if (cleanText && cleanText.trim()) {
-    events.push(sseEvent("content_block_start", {
-      type: "content_block_start",
-      index: blockIndex,
-      content_block: { type: "text", text: "" }
-    }));
-    events.push(sseEvent("content_block_delta", {
-      type: "content_block_delta",
-      index: blockIndex,
-      delta: { type: "text_delta", text: cleanText }
-    }));
-    events.push(sseEvent("content_block_stop", {
-      type: "content_block_stop",
-      index: blockIndex
-    }));
-    blockIndex++;
-  }
-
-  // Tool use blocks
-  for (const tc of toolCallsToAnthropicBlocks(toolCalls)) {
-    const inputJson = JSON.stringify(tc.input);
-    events.push(sseEvent("content_block_start", {
-      type: "content_block_start",
-      index: blockIndex,
-      content_block: { type: "tool_use", id: tc.id, name: tc.name, input: {} }
-    }));
-    events.push(sseEvent("content_block_delta", {
-      type: "content_block_delta",
-      index: blockIndex,
-      delta: { type: "input_json_delta", partial_json: inputJson }
-    }));
-    events.push(sseEvent("content_block_stop", {
-      type: "content_block_stop",
-      index: blockIndex
-    }));
-    blockIndex++;
-  }
-
-  const outputTokens = estimateTokens(fullContent);
-  const stopReason = toolCalls.length > 0 ? "tool_use" : "end_turn";
-
-  events.push(sseEvent("message_delta", {
-    type: "message_delta",
-    delta: { stop_reason: stopReason, stop_sequence: null },
-    usage: { output_tokens: outputTokens }
-  }));
-
-  events.push(sseEvent("message_stop", { type: "message_stop" }));
-  events.push(`data: [DONE]\n\n`);
-
-  return events;
-}
-
-// ── OpenAI /v1/chat/completions format (unchanged) ──
-
-function formatOpenAIResponse(result, model, requestId, stream = false, fullContent = null) {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const rawContent = result.content || result.text || "";
-
-  if (stream) {
-    if (result.finish_reason !== "stop") {
-      return {
-        id: `chatcmpl-${requestId}`,
-        object: "chat.completion.chunk",
-        created: timestamp,
-        model: model || "glm-5",
-        choices: [{ index: 0, delta: { content: rawContent }, finish_reason: null }]
-      };
-    }
-
-    const contentToCheck = fullContent || rawContent;
-    const toolCalls = parseToolCalls(contentToCheck);
-
-    if (toolCalls.length > 0) {
-      return {
-        id: `chatcmpl-${requestId}`,
-        object: "chat.completion.chunk",
-        created: timestamp,
-        model: model || "glm-5",
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: toolCalls.map((tc, idx) => ({
-              index: idx, id: tc.id, type: "function",
-              function: { name: tc.function.name, arguments: tc.function.arguments }
-            }))
-          },
-          finish_reason: "tool_calls"
-        }]
-      };
-    }
-
-    return {
-      id: `chatcmpl-${requestId}`,
-      object: "chat.completion.chunk",
-      created: timestamp,
-      model: model || "glm-5",
-      choices: [{ index: 0, delta: { content: rawContent }, finish_reason: "stop" }]
-    };
-  }
-
-  const toolCalls = parseToolCalls(rawContent);
-  const cleanContent = toolCalls.length > 0 ? removeToolCallsFromContent(rawContent) : rawContent;
-
-  return {
-    id: `chatcmpl-${requestId}`,
-    object: "chat.completion",
-    created: timestamp,
-    model: model || "glm-5",
-    choices: [{
-      index: 0,
-      message: {
-        role: "assistant",
-        content: toolCalls.length > 0 ? (cleanContent || null) : cleanContent,
-        ...(toolCalls.length > 0 && { tool_calls: toolCalls })
-      },
-      finish_reason: toolCalls.length > 0 ? "tool_calls" : "stop"
-    }],
-    usage: {
-      prompt_tokens: estimateTokens(result.prompt || ""),
-      completion_tokens: estimateTokens(rawContent),
-      total_tokens: estimateTokens(result.prompt || "") + estimateTokens(rawContent)
-    }
-  };
-}
-
-function formatOpenAIError(message, type = "api_error", code = null) {
-  return { error: { message, type, code, param: null } };
 }
 
 function formatAnthropicError(message, type = "api_error") {
   return { type: "error", error: { type, message } };
 }
 
-// ============== Z.AI DIRECT HTTP FUNCTIONS ==============
+// ─── SSE helpers ─────────────────────────────────────────────────────────────
+const sseEvent = (event, data) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+const ssePing  = () => ": ping\n\n";
 
-async function scrapeConfig() {
-  try {
-    const res = await fetch(BASE_URL, { signal: AbortSignal.timeout(10000) });
-    const text = await res.text();
-    const match = text.match(/prod-fe-\d+\.\d+\.\d+/);
-    if (match) {
-      session.feVersion = match[0];
-      console.log(`[Config] fe_version: ${session.feVersion}`);
+// ═════════════════════════════════════════════════════════════════════════════
+//  RESPONSE FORMATTERS — OPENAI
+// ═════════════════════════════════════════════════════════════════════════════
+
+function formatOpenAIResponse(content, model, requestId, stream = false, fullContent = null, finishReason = null) {
+  const ts  = Math.floor(Date.now() / 1000);
+  const raw = typeof content === "string" ? content : "";
+
+  if (stream) {
+    // Final stop chunk: check for tool calls
+    if (finishReason) {
+      const check = fullContent || raw;
+      const tcs   = parseToolCalls(check);
+      if (tcs.length > 0) {
+        return {
+          id: `chatcmpl-${requestId}`, object: "chat.completion.chunk",
+          created: ts, model: model || "gpt-4o",
+          choices: [{
+            index: 0,
+            delta: { tool_calls: tcs.map((tc, i) => ({
+              index: i, id: tc.id, type: "function",
+              function: { name: tc.function.name, arguments: tc.function.arguments },
+            }))},
+            finish_reason: "tool_calls",
+          }],
+        };
+      }
+      return {
+        id: `chatcmpl-${requestId}`, object: "chat.completion.chunk",
+        created: ts, model: model || "gpt-4o",
+        choices: [{ index: 0, delta: {}, finish_reason: finishReason }],
+      };
     }
+    // Regular delta chunk
+    return {
+      id: `chatcmpl-${requestId}`, object: "chat.completion.chunk",
+      created: ts, model: model || "gpt-4o",
+      choices: [{ index: 0, delta: { content: raw }, finish_reason: null }],
+    };
+  }
+
+  // Non-streaming
+  const tcs      = parseToolCalls(raw);
+  const cleanMsg = tcs.length > 0 ? removeToolCallsFromContent(raw) : raw;
+  const inputTok = estimateTokens(fullContent || "");
+  const outTok   = estimateTokens(raw);
+
+  return {
+    id: `chatcmpl-${requestId}`, object: "chat.completion",
+    created: ts, model: model || "gpt-4o",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: tcs.length > 0 ? (cleanMsg || null) : cleanMsg,
+        ...(tcs.length > 0 && { tool_calls: tcs }),
+      },
+      finish_reason: tcs.length > 0 ? "tool_calls" : "stop",
+    }],
+    usage: { prompt_tokens: inputTok, completion_tokens: outTok, total_tokens: inputTok + outTok },
+  };
+}
+
+function formatOpenAIError(message, type = "api_error", status = 500) {
+  return { error: { message, type, code: status, param: null } };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Z.AI SESSION MANAGEMENT
+// ═════════════════════════════════════════════════════════════════════════════
+
+async function scrapeFeVersion() {
+  try {
+    const res  = await fetch(BASE_URL, { signal: AbortSignal.timeout(10_000) });
+    const text = await res.text();
+    const m    = text.match(/prod-fe-\d+\.\d+\.\d+/);
+    if (m) { session.feVersion = m[0]; console.log(`[Config] feVersion: ${session.feVersion}`); }
   } catch (e) {
-    console.warn(`[Config] Scrape error: ${e.message}, using default feVersion`);
+    console.warn(`[Config] Version scrape skipped: ${e.message}`);
   }
 }
 
-function generateZaSignature(prompt, token, userId) {
-  const timestamp = String(Date.now());
-  const requestId = crypto.randomUUID();
-  const bucket = Math.floor(Number(timestamp) / 300000);
-
-  const wKey = crypto
-    .createHmac("sha256", session.saltKey)
-    .update(String(bucket))
-    .digest("hex");
-
-  const payloadDict = { requestId, timestamp, user_id: userId };
-  const sortedItems = Object.entries(payloadDict).sort((a, b) => a[0].localeCompare(b[0]));
-  const sortedPayload = sortedItems.map(([k, v]) => `${k},${v}`).join(",");
-
-  const promptB64 = Buffer.from(prompt.trim()).toString("base64");
-  const dataToSign = `${sortedPayload}|${promptB64}|${timestamp}`;
-
-  const signature = crypto
-    .createHmac("sha256", wKey)
-    .update(dataToSign)
-    .digest("hex");
-
-  const params = new URLSearchParams({
-    timestamp, requestId, user_id: userId,
-    version: "0.0.1", platform: "web", token,
-    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
-    language: "en-US", screen_resolution: "1920x1080",
-    viewport_size: "1920x1080", timezone: "Europe/Paris",
-    timezone_offset: "-60", signature_timestamp: timestamp
-  });
-
-  return { signature, timestamp, urlParams: params.toString() };
-}
-
-async function initializeSession() {
-  if (session.initializing) {
-    await new Promise(resolve => {
-      const check = setInterval(() => {
-        if (!session.initializing) { clearInterval(check); resolve(); }
-      }, 100);
+async function initializeSession(force = false) {
+  if (session.initializing && !force) {
+    await new Promise(r => {
+      const iv = setInterval(() => { if (!session.initializing) { clearInterval(iv); r(); } }, 100);
     });
     return;
   }
-
   session.initializing = true;
   console.log("[Session] Initializing Z.AI session...");
 
   try {
-    await scrapeConfig();
+    await scrapeFeVersion();
+    const headers = { "Origin": BASE_URL, "Referer": `${BASE_URL}/`, "Content-Type": "application/json" };
 
-    const headers = {
-      "Origin": BASE_URL,
-      "Referer": `${BASE_URL}/`,
-      "Content-Type": "application/json"
-    };
+    // Warm up guest endpoint
+    await fetch(`${BASE_URL}/api/v1/auths/guest`, { method: "POST", headers, body: "{}", signal: AbortSignal.timeout(15_000) }).catch(() => {});
 
-    await fetch(`${BASE_URL}/api/v1/auths/guest`, {
-      method: "POST", headers, body: "{}", signal: AbortSignal.timeout(15000)
-    });
-
-    const authRes = await fetch(`${BASE_URL}/api/v1/auths/`, {
-      headers, signal: AbortSignal.timeout(15000)
-    });
-
-    if (!authRes.ok) throw new Error(`Auth failed: ${authRes.status}`);
+    const authRes  = await fetch(`${BASE_URL}/api/v1/auths/`, { headers, signal: AbortSignal.timeout(15_000) });
+    if (!authRes.ok) throw new Error(`Auth fetch failed: ${authRes.status}`);
 
     const authData = await authRes.json();
-    session.token = authData.token || "";
+    session.token  = authData.token || "";
 
     if (!session.token) {
-      const guestRes = await fetch(`${BASE_URL}/api/v1/auths/guest`, {
-        method: "POST", headers, body: "{}", signal: AbortSignal.timeout(15000)
-      });
-      if (guestRes.ok) {
-        const gd = await guestRes.json();
-        session.token = gd.token || "";
-      }
+      const gr = await fetch(`${BASE_URL}/api/v1/auths/guest`, { method: "POST", headers, body: "{}", signal: AbortSignal.timeout(15_000) });
+      if (gr.ok) session.token = (await gr.json()).token || "";
     }
 
-    if (session.token) {
-      try {
-        const parts = session.token.split(".");
-        const padded = parts[1] + "==";
-        const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
-        session.userId = payload.id || "";
-        session.userName = (payload.email || "Guest").split("@")[0];
-        console.log(`[Session] Connected. UserID: ${session.userId.substring(0, 8)}... (${session.userName})`);
-      } catch (e) {
-        console.warn("[Session] Token decode failed, but continuing.");
-      }
-      session.initialized = true;
-    } else {
-      throw new Error("No token received from Z.AI");
-    }
+    if (!session.token) throw new Error("No token from Z.AI");
+
+    // Decode JWT payload
+    try {
+      const payload   = JSON.parse(Buffer.from(session.token.split(".")[1] + "==", "base64").toString());
+      session.userId   = payload.id  || "";
+      session.userName = (payload.email || "Guest").split("@")[0];
+    } catch {}
+
+    session.initialized = true;
+    console.log(`[Session] ✓ Connected as ${session.userName} (${session.userId.substring(0, 8)}...)`);
   } catch (e) {
-    console.error("[Session] Initialization error:", e.message);
+    console.error("[Session] Init error:", e.message);
     session.initialized = false;
     throw e;
   } finally {
@@ -767,9 +637,27 @@ async function initializeSession() {
   }
 }
 
+function buildZaiSignature(prompt) {
+  const ts        = String(Date.now());
+  const requestId = crypto.randomUUID();
+  const bucket    = Math.floor(Number(ts) / 300_000);
+  const wKey      = crypto.createHmac("sha256", session.saltKey).update(String(bucket)).digest("hex");
+  const dict      = { requestId, timestamp: ts, user_id: session.userId };
+  const sorted    = Object.entries(dict).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k},${v}`).join(",");
+  const sig       = crypto.createHmac("sha256", wKey).update(`${sorted}|${Buffer.from(prompt.trim()).toString("base64")}|${ts}`).digest("hex");
+  const params    = new URLSearchParams({
+    timestamp: ts, requestId, user_id: session.userId,
+    version: "0.0.1", platform: "web", token: session.token,
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+    language: "en-US", screen_resolution: "1920x1080", viewport_size: "1920x1080",
+    timezone: "Europe/Paris", timezone_offset: "-60", signature_timestamp: ts,
+  });
+  return { signature: sig, urlParams: params.toString() };
+}
+
 function getContextVars() {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, "0");
+  const now  = new Date();
+  const pad  = n => String(n).padStart(2, "0");
   const date = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -781,75 +669,75 @@ function getContextVars() {
     "{{CURRENT_TIME}}": time,
     "{{CURRENT_WEEKDAY}}": days[now.getDay()],
     "{{CURRENT_TIMEZONE}}": "Europe/Paris",
-    "{{USER_LANGUAGE}}": "en-US"
+    "{{USER_LANGUAGE}}": "en-US",
   };
 }
 
-async function* sendToZAI(prompt, options = {}) {
+async function* streamFromZAI(prompt, options = {}) {
   const {
-    model = "glm-5",
-    webSearch = session.features.webSearch,
-    thinking = session.features.thinking,
-    imageGen = session.features.imageGen,
+    model       = "glm-5",
+    webSearch   = session.features.webSearch,
+    thinking    = session.features.thinking,
+    imageGen    = session.features.imageGen,
     previewMode = session.features.previewMode,
-    chatId = session.chatId,
-    messages = session.messages,
+    chatId      = session.chatId,
+    messages    = session.messages,
   } = options;
 
   if (!session.initialized) await initializeSession();
 
-  const { signature, urlParams } = generateZaSignature(prompt, session.token, session.userId);
+  const { signature, urlParams } = buildZaiSignature(prompt);
   const url = `${BASE_URL}/api/v2/chat/completions?${urlParams}`;
 
-  const headers = {
-    "Origin": BASE_URL,
-    "Referer": `${BASE_URL}/`,
-    "Authorization": `Bearer ${session.token}`,
-    "X-Signature": signature,
-    "X-FE-Version": session.feVersion,
-    "Content-Type": "application/json"
-  };
-
-  const msgList = [...messages];
-  msgList.push({ role: "user", content: prompt });
-
-  const body = JSON.stringify({
-    model,
-    chat_id: chatId,
-    messages: msgList,
-    signature_prompt: prompt,
-    stream: true,
-    params: {},
-    extra: {},
-    features: {
-      image_generation: imageGen,
-      web_search: webSearch,
-      auto_web_search: webSearch,
-      preview_mode: previewMode,
-      flags: [],
-      enable_thinking: thinking
-    },
-    variables: getContextVars(),
-    background_tasks: { title_generation: true, tags_generation: true }
-  });
+  const msgList = [...messages, { role: "user", content: prompt }];
 
   let res;
   try {
-    res = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(90000) });
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Origin":         BASE_URL,
+        "Referer":        `${BASE_URL}/`,
+        "Authorization":  `Bearer ${session.token}`,
+        "X-Signature":    signature,
+        "X-FE-Version":   session.feVersion,
+        "Content-Type":   "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        chat_id:           chatId,
+        messages:          msgList,
+        signature_prompt:  prompt,
+        stream:            true,
+        params:            {},
+        extra:             {},
+        features: {
+          image_generation:  imageGen,
+          web_search:        webSearch,
+          auto_web_search:   webSearch,
+          preview_mode:      previewMode,
+          flags:             [],
+          enable_thinking:   thinking,
+        },
+        variables:         getContextVars(),
+        background_tasks:  { title_generation: true, tags_generation: true },
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
   } catch (e) {
     throw new Error(`Z.AI connection error: ${e.message}`);
   }
 
   if (res.status === 401) {
     session.initialized = false;
-    await initializeSession();
-    yield* sendToZAI(prompt, options);
+    await initializeSession(true);
+    yield* streamFromZAI(prompt, options);
     return;
   }
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    throw new Error(`Z.AI error ${res.status}: ${errText}`);
+    throw new Error(`Z.AI error ${res.status}: ${errText.substring(0, 200)}`);
   }
 
   const decoder = new TextDecoder();
@@ -859,652 +747,422 @@ async function* sendToZAI(prompt, options = {}) {
     buffer += decoder.decode(chunk, { stream: true });
     const lines = buffer.split("\n");
     buffer = lines.pop();
-
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || !trimmed.startsWith("data: ")) continue;
-      const dataStr = trimmed.slice(6);
-      if (dataStr === "[DONE]") return;
+      const raw = trimmed.slice(6);
+      if (raw === "[DONE]") return;
       try {
-        const json = JSON.parse(dataStr);
-        let chunk = "";
-        if (json.data?.delta_content !== undefined) chunk = json.data.delta_content;
-        else if (json.choices?.[0]?.delta?.content !== undefined) chunk = json.choices[0].delta.content;
-        if (chunk) yield chunk;
-      } catch (e) {}
+        const json = JSON.parse(raw);
+        const text = json.data?.delta_content ?? json.choices?.[0]?.delta?.content ?? null;
+        if (text !== null && text !== undefined) yield text;
+      } catch {}
     }
   }
 
+  // Flush remaining
   if (buffer.trim().startsWith("data: ")) {
-    const dataStr = buffer.trim().slice(6);
-    if (dataStr !== "[DONE]") {
+    const raw = buffer.trim().slice(6);
+    if (raw !== "[DONE]") {
       try {
-        const json = JSON.parse(dataStr);
-        let chunk = "";
-        if (json.data?.delta_content !== undefined) chunk = json.data.delta_content;
-        else if (json.choices?.[0]?.delta?.content !== undefined) chunk = json.choices[0].delta.content;
-        if (chunk) yield chunk;
-      } catch (e) {}
+        const json = JSON.parse(raw);
+        const text = json.data?.delta_content ?? json.choices?.[0]?.delta?.content ?? null;
+        if (text !== null && text !== undefined) yield text;
+      } catch {}
     }
   }
 }
 
-// ============== DASHBOARD HTML ==============
+// Convenience: collect full response
+async function collectFromZAI(prompt, options = {}) {
+  let full = "";
+  for await (const chunk of streamFromZAI(prompt, options)) full += chunk;
+  return full;
+}
 
-const getDashboardHTML = (host) => `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Z.AI Direct Bridge</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 50%, #1b263b 100%);
-      min-height: 100vh; color: #e0e0e0; padding: 20px;
-    }
-    .container { max-width: 1200px; margin: 0 auto; }
-    .header {
-      text-align: center; padding: 40px 20px;
-      background: rgba(255,255,255,0.05); border-radius: 16px;
-      margin-bottom: 30px; border: 1px solid rgba(255,255,255,0.1);
-    }
-    .header h1 {
-      font-size: 2.5rem;
-      background: linear-gradient(135deg, #3b82f6, #1d4ed8, #60a5fa);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      margin-bottom: 10px;
-    }
-    .header p { color: #888; font-size: 1.1rem; }
-    .badges { display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
-    .badge {
-      display: inline-block; padding: 4px 12px; border-radius: 12px;
-      font-size: 0.8rem; font-weight: 700;
-    }
-    .badge-green { background: #22c55e; color: #000; }
-    .badge-blue  { background: #3b82f6; color: #fff; }
-    .badge-purple{ background: #a855f7; color: #fff; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-    .card {
-      background: rgba(255,255,255,0.05); border-radius: 12px;
-      padding: 24px; border: 1px solid rgba(255,255,255,0.1);
-    }
-    .card h2 { color: #60a5fa; margin-bottom: 16px; font-size: 1.2rem; }
-    .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .stat { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; }
-    .stat .label { color: #888; font-size: 0.85rem; }
-    .stat .value { color: #60a5fa; font-weight: 600; font-size: 1.5rem; margin-top: 4px; }
-    .code-block {
-      background: #0d1117; border-radius: 8px; padding: 16px; overflow-x: auto;
-      font-family: 'Monaco', 'Menlo', monospace; font-size: 0.85rem;
-      border: 1px solid #30363d; margin: 12px 0;
-    }
-    .code-block code { color: #c9d1d9; white-space: pre-wrap; }
-    .endpoint { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 8px; }
-    .method {
-      display: inline-block; padding: 4px 8px; border-radius: 4px;
-      font-size: 0.75rem; font-weight: 600; margin-right: 8px;
-    }
-    .method.get { background: #22c55e; color: #000; }
-    .method.post { background: #3b82f6; color: #fff; }
-    .path { font-family: monospace; color: #e0e0e0; }
-    .desc { color: #888; font-size: 0.85rem; margin-top: 4px; }
-    .section-label {
-      font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.1em; color: #a855f7; margin: 16px 0 8px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Z.AI Direct Bridge</h1>
-      <p>HTTP-only mode — No browser required</p>
-      <div class="badges">
-        <span class="badge badge-green">⚡ Direct Mode</span>
-        <span class="badge badge-blue">OpenAI Compatible</span>
-        <span class="badge badge-purple">Anthropic Compatible</span>
-      </div>
-    </div>
+// ═════════════════════════════════════════════════════════════════════════════
+//  STREAMING UTILITIES
+// ═════════════════════════════════════════════════════════════════════════════
 
-    <div class="grid">
-      <div class="card">
-        <h2>Session Status</h2>
-        <div class="stat-grid">
-          <div class="stat">
-            <div class="label">Connection</div>
-            <div class="value" id="sessionStatus">...</div>
-          </div>
-          <div class="stat">
-            <div class="label">User</div>
-            <div class="value" id="sessionUser" style="font-size:1rem">...</div>
-          </div>
-          <div class="stat">
-            <div class="label">Messages</div>
-            <div class="value" id="msgCount">0</div>
-          </div>
-          <div class="stat">
-            <div class="label">FE Version</div>
-            <div class="value" id="feVersion" style="font-size:0.85rem">...</div>
-          </div>
-        </div>
-      </div>
+function startSSEResponse(res) {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+  const keepAlive = setInterval(() => { try { res.write(ssePing()); } catch { clearInterval(keepAlive); } }, 5_000);
+  return () => clearInterval(keepAlive);
+}
 
-      <div class="card">
-        <h2>Features</h2>
-        <div class="stat-grid">
-          <div class="stat"><div class="label">Web Search</div><div class="value" id="featSearch">-</div></div>
-          <div class="stat"><div class="label">Thinking</div><div class="value" id="featThink">-</div></div>
-          <div class="stat"><div class="label">Image Gen</div><div class="value" id="featImage">-</div></div>
-          <div class="stat"><div class="label">Preview</div><div class="value" id="featPreview">-</div></div>
-        </div>
-      </div>
+function parseOptions(body, type = "anthropic") {
+  const {
+    model, stream = false, temperature, max_tokens, top_p,
+    tools, tool_choice, metadata,
+    // Z.AI feature hints
+    webSearch, deepThink, search,
+  } = body;
 
-      <div class="card" style="grid-column: span 2;">
-        <h2>API Endpoints</h2>
+  return {
+    model,
+    stream: !!stream,
+    temperature: temperature ?? null,
+    maxTokens: max_tokens ?? 4096,
+    topP: top_p ?? null,
+    tools: tools || null,
+    toolChoice: tool_choice || null,
+    metadata: metadata || null,
+    webSearch: webSearch ?? search ?? null,
+    deepThink: deepThink ?? null,
+  };
+}
 
-        <div class="section-label">Anthropic-Compatible (for Claude Code)</div>
-        <div class="endpoint">
-          <span class="method post">POST</span>
-          <span class="path">/v1/messages</span>
-          <div class="desc">Native Anthropic Messages API — streaming SSE + tool_use blocks. Use ANTHROPIC_BASE_URL=http://${host}</div>
-        </div>
-        <div class="endpoint">
-          <span class="method get">GET</span>
-          <span class="path">/v1/models</span>
-          <div class="desc">Model list (returns Anthropic-style model IDs)</div>
-        </div>
-
-        <div class="section-label">OpenAI-Compatible</div>
-        <div class="endpoint">
-          <span class="method post">POST</span>
-          <span class="path">/v1/chat/completions</span>
-          <div class="desc">OpenAI-compatible chat endpoint. Supports streaming.</div>
-        </div>
-
-        <div class="section-label">Management</div>
-        <div class="endpoint">
-          <span class="method post">POST</span>
-          <span class="path">/features</span>
-          <div class="desc">Toggle webSearch, thinking, imageGen, previewMode</div>
-        </div>
-        <div class="endpoint">
-          <span class="method post">POST</span>
-          <span class="path">/admin/session/clear</span>
-          <div class="desc">Clear conversation history</div>
-        </div>
-      </div>
-
-      <div class="card" style="grid-column: span 2;">
-        <h2>Claude Code Setup (no LiteLLM needed)</h2>
-        <div class="code-block">
-          <code># Windows PowerShell
-$env:ANTHROPIC_BASE_URL="http://localhost:${config.server.port}"
-$env:ANTHROPIC_AUTH_TOKEN="${config.auth.token}"
-$env:ANTHROPIC_API_KEY=""
-claude
-
-# Windows CMD
-set ANTHROPIC_BASE_URL=http://localhost:${config.server.port}
-set ANTHROPIC_AUTH_TOKEN=${config.auth.token}
-set ANTHROPIC_API_KEY=""
-claude
-
-# Permanent — add to ~/.claude/settings.json:
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:${config.server.port}",
-    "ANTHROPIC_AUTH_TOKEN": "${config.auth.token}",
-    "ANTHROPIC_API_KEY": ""
-  }
-}</code>
-        </div>
-
-        <h2 style="margin-top:20px">Test the Anthropic endpoint</h2>
-        <div class="code-block">
-          <code># Non-streaming
-curl -X POST http://${host}/v1/messages \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: ${config.auth.token}" \\
-  -H "anthropic-version: 2023-06-01" \\
-  -d '{"model":"claude-sonnet-4-6","max_tokens":100,"messages":[{"role":"user","content":"Hello!"}]}'
-
-# Streaming
-curl -X POST http://${host}/v1/messages \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: ${config.auth.token}" \\
-  -H "anthropic-version: 2023-06-01" \\
-  -d '{"model":"claude-sonnet-4-6","max_tokens":500,"stream":true,"messages":[{"role":"user","content":"Say hi"}]}'</code>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    async function updateStatus() {
-      try {
-        const res = await fetch('/status');
-        const d = await res.json();
-        document.getElementById('sessionStatus').textContent = d.connected ? '✓ OK' : '✗ Off';
-        document.getElementById('sessionUser').textContent = d.userName || '-';
-        document.getElementById('msgCount').textContent = d.messageCount;
-        document.getElementById('feVersion').textContent = d.feVersion || '-';
-        document.getElementById('featSearch').textContent = d.features?.webSearch ? 'ON' : 'OFF';
-        document.getElementById('featThink').textContent = d.features?.thinking ? 'ON' : 'OFF';
-        document.getElementById('featImage').textContent = d.features?.imageGen ? 'ON' : 'OFF';
-        document.getElementById('featPreview').textContent = d.features?.previewMode ? 'ON' : 'OFF';
-      } catch(e) { console.error(e); }
-    }
-    updateStatus();
-    setInterval(updateStatus, 3000);
-  </script>
-</body>
-</html>`;
-
-// ============== ROUTES ==============
-
-app.get("/", (req, res) => {
-  const host = req.headers.host || `localhost:${config.server.port}`;
-  res.send(getDashboardHTML(host));
-});
-
-app.get("/status", (req, res) => {
-  res.json({
-    connected: session.initialized,
-    userName: session.userName,
-    userId: session.userId ? session.userId.substring(0, 8) + "..." : null,
-    feVersion: session.feVersion,
-    chatId: session.chatId,
-    messageCount: session.messages.length,
-    features: session.features,
-    mode: "direct"
-  });
-});
-
-// ============================================================
-// ── ANTHROPIC-COMPATIBLE /v1/messages ───────────────────────
-// ============================================================
+// ═════════════════════════════════════════════════════════════════════════════
+//  ROUTES — ANTHROPIC  /v1/messages
+// ═════════════════════════════════════════════════════════════════════════════
 
 app.post("/v1/messages", authMiddleware, async (req, res) => {
-  const {
-    model = "claude-sonnet-4-6",
-    messages,
-    system,
-    stream = false,
-    max_tokens,
-    tools,          // accepted but not forwarded (Z.AI handles via prompt)
-    tool_choice,    // accepted, ignored
-    temperature,    // accepted, ignored
-    metadata,       // accepted, ignored
-  } = req.body;
+  session.stats.totalRequests++;
+  session.stats.anthropicRequests++;
+
+  const { model = "claude-sonnet-4-6", messages, system, stream = false, tools, tool_choice } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json(formatAnthropicError("messages is required and must be an array", "invalid_request_error"));
   }
 
   const freshSession = req.headers["x-fresh-session"] === "true";
-  const requestId = generateId();
-
-  // Build flat prompt from Anthropic messages + system
-  const prompt = anthropicMessagesToPrompt(messages, system);
-  const inputTokens = estimateTokens(prompt);
+  const requestId    = generateId();
+  const prompt       = anthropicMessagesToPrompt(messages, system);
+  const inputTokens  = estimateTokens(prompt);
 
   if (freshSession) {
     session.messages = [];
-    session.chatId = crypto.randomUUID();
-    console.log(`[Session] Fresh session started. New chatId: ${session.chatId}`);
+    session.chatId   = crypto.randomUUID();
+    console.log("[Session] Fresh session:", session.chatId);
   }
 
-  // Map claude-* model names to a Z.AI model
-  // glm-5 is the default capable model; glm-5-turbo for "opus"-level requests
-  const zaiModel = (() => {
-    const m = (model || "").toLowerCase();
-    if (m.includes("opus"))   return "GLM-5-Turbo";
-    if (m.includes("haiku"))  return "glm-5";
-    return "glm-5"; // sonnet and everything else
-  })();
-
-  const opts = {
-    model: zaiModel,
-    webSearch: session.features.webSearch,
-    thinking: session.features.thinking,
-    imageGen: session.features.imageGen,
+  const zaiOpts = {
+    model:       resolveZaiModel(model),
+    webSearch:   session.features.webSearch,
+    thinking:    session.features.thinking,
+    imageGen:    session.features.imageGen,
     previewMode: session.features.previewMode,
-    chatId: session.chatId,
-    messages: session.messages,
+    chatId:      session.chatId,
+    messages:    session.messages,
   };
 
-  // ── STREAMING ──
+  // ── Streaming ──────────────────────────────────────────────────────────────
   if (stream) {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.flushHeaders();
-
+    const stopKeepAlive = startSSEResponse(res);
     const msgId = `msg_${requestId}`;
 
-    // Send message_start immediately
+    // Emit message_start
     res.write(sseEvent("message_start", {
       type: "message_start",
       message: {
-        id: msgId,
-        type: "message",
-        role: "assistant",
-        model: model,
-        content: [],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: inputTokens, output_tokens: 0 }
-      }
+        id: msgId, type: "message", role: "assistant", model,
+        content: [], stop_reason: null, stop_sequence: null,
+        usage: { input_tokens: inputTokens, output_tokens: 0 },
+      },
     }));
 
-    // Ping to keep connection alive
-    const keepAlive = setInterval(() => {
-      try { res.write(": ping\n\n"); } catch (e) { clearInterval(keepAlive); }
-    }, 5000);
-
-    let fullContent = "";
-    let sentContent = "";
-    let textBlockOpen = false;
-    let textBlockIndex = 0;
+    let fullContent  = "";
+    let sentContent  = "";
+    let blockOpen    = false;
+    const blockIndex = 0;
 
     try {
-      for await (const chunk of sendToZAI(prompt, opts)) {
+      for await (const chunk of streamFromZAI(prompt, zaiOpts)) {
         fullContent += chunk;
-
-        // Buffer while a tool call is still being built
         if (hasIncompleteToolCall(fullContent)) continue;
 
         const delta = fullContent.substring(sentContent.length);
-        if (delta) {
-          // Open text block on first real delta
-          if (!textBlockOpen) {
-            res.write(sseEvent("content_block_start", {
-              type: "content_block_start",
-              index: textBlockIndex,
-              content_block: { type: "text", text: "" }
-            }));
-            textBlockOpen = true;
-          }
+        if (!delta) continue;
 
-          res.write(sseEvent("content_block_delta", {
-            type: "content_block_delta",
-            index: textBlockIndex,
-            delta: { type: "text_delta", text: delta }
-          }));
-          sentContent = fullContent;
+        if (!blockOpen) {
+          res.write(sseEvent("content_block_start", { type: "content_block_start", index: blockIndex, content_block: { type: "text", text: "" } }));
+          blockOpen = true;
         }
+        res.write(sseEvent("content_block_delta", { type: "content_block_delta", index: blockIndex, delta: { type: "text_delta", text: delta } }));
+        sentContent = fullContent;
       }
 
-      // Flush any remaining buffered content
+      // Flush remainder
       const remaining = fullContent.substring(sentContent.length);
       if (remaining) {
-        if (!textBlockOpen) {
-          res.write(sseEvent("content_block_start", {
-            type: "content_block_start",
-            index: textBlockIndex,
-            content_block: { type: "text", text: "" }
-          }));
-          textBlockOpen = true;
+        if (!blockOpen) {
+          res.write(sseEvent("content_block_start", { type: "content_block_start", index: blockIndex, content_block: { type: "text", text: "" } }));
+          blockOpen = true;
         }
-        res.write(sseEvent("content_block_delta", {
-          type: "content_block_delta",
-          index: textBlockIndex,
-          delta: { type: "text_delta", text: remaining }
-        }));
+        res.write(sseEvent("content_block_delta", { type: "content_block_delta", index: blockIndex, delta: { type: "text_delta", text: remaining } }));
       }
 
-      // Close text block if open
-      if (textBlockOpen) {
-        res.write(sseEvent("content_block_stop", {
-          type: "content_block_stop",
-          index: textBlockIndex
-        }));
-        textBlockOpen = false;
+      if (blockOpen) {
+        res.write(sseEvent("content_block_stop", { type: "content_block_stop", index: blockIndex }));
       }
 
-      // Parse tool calls from complete content and emit as tool_use blocks
+      // Emit tool_use blocks if any
       const toolCalls = parseToolCalls(fullContent);
-      let blockIdx = textBlockIndex + 1;
-
+      let blkIdx = blockIndex + 1;
       for (const tc of toolCallsToAnthropicBlocks(toolCalls)) {
-        const inputJson = JSON.stringify(tc.input);
-        res.write(sseEvent("content_block_start", {
-          type: "content_block_start",
-          index: blockIdx,
-          content_block: { type: "tool_use", id: tc.id, name: tc.name, input: {} }
-        }));
-        res.write(sseEvent("content_block_delta", {
-          type: "content_block_delta",
-          index: blockIdx,
-          delta: { type: "input_json_delta", partial_json: inputJson }
-        }));
-        res.write(sseEvent("content_block_stop", {
-          type: "content_block_stop",
-          index: blockIdx
-        }));
-        blockIdx++;
+        res.write(sseEvent("content_block_start", { type: "content_block_start", index: blkIdx, content_block: { type: "tool_use", id: tc.id, name: tc.name, input: {} } }));
+        res.write(sseEvent("content_block_delta", { type: "content_block_delta", index: blkIdx, delta: { type: "input_json_delta", partial_json: JSON.stringify(tc.input) } }));
+        res.write(sseEvent("content_block_stop",  { type: "content_block_stop",  index: blkIdx }));
+        blkIdx++;
       }
 
-      const outputTokens = estimateTokens(fullContent);
       const stopReason = toolCalls.length > 0 ? "tool_use" : "end_turn";
-
-      res.write(sseEvent("message_delta", {
-        type: "message_delta",
-        delta: { stop_reason: stopReason, stop_sequence: null },
-        usage: { output_tokens: outputTokens }
-      }));
-
+      res.write(sseEvent("message_delta", { type: "message_delta", delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: estimateTokens(fullContent) } }));
       res.write(sseEvent("message_stop", { type: "message_stop" }));
-      res.write(`data: [DONE]\n\n`);
+      res.write("data: [DONE]\n\n");
 
-      // Update session history
+      // Persist history
       session.messages.push({ role: "user", content: prompt });
       if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
 
     } catch (e) {
-      console.error("[Anthropic Stream] Error:", e.message);
+      session.stats.errors++;
+      console.error("[Anthropic/stream] Error:", e.message);
       res.write(sseEvent("error", { type: "error", error: { type: "api_error", message: e.message } }));
-      res.write(`data: [DONE]\n\n`);
+      res.write("data: [DONE]\n\n");
     } finally {
-      clearInterval(keepAlive);
+      stopKeepAlive();
       res.end();
     }
 
-  // ── NON-STREAMING ──
+  // ── Non-streaming ──────────────────────────────────────────────────────────
   } else {
     try {
-      let fullContent = "";
-      for await (const chunk of sendToZAI(prompt, opts)) {
-        fullContent += chunk;
-      }
-
+      const fullContent = await collectFromZAI(prompt, zaiOpts);
       session.messages.push({ role: "user", content: prompt });
       if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
-
       res.json(formatAnthropicResponse(fullContent, model, requestId));
     } catch (e) {
-      console.error("[Anthropic API] Error:", e.message);
-      const statusCode = e.message.includes("401") ? 401 : 500;
-      res.status(statusCode).json(formatAnthropicError(e.message));
+      session.stats.errors++;
+      console.error("[Anthropic/sync] Error:", e.message);
+      res.status(e.message.includes("401") ? 401 : 500).json(formatAnthropicError(e.message));
     }
   }
 });
 
-// ============================================================
-// ── OPENAI-COMPATIBLE /v1/chat/completions (unchanged) ──────
-// ============================================================
-
-const knownModels = [
-  "glm-4.7", "glm-5", "GLM-5-Turbo", "GLM-5v-Turbo", "z1-mini",
-  // Also advertise Anthropic model names so Claude Code's model probe passes
-  "claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001",
-];
-
-app.get("/v1/models", authMiddleware, (req, res) => {
-  // Detect whether caller wants Anthropic or OpenAI format
-  const wantsAnthropic = req.headers["anthropic-version"] ||
-                         req.headers["x-api-key"] ||
-                         (req.headers.authorization || "").includes(config.auth.token);
-
-  res.json({
-    object: "list",
-    data: knownModels.map(m => ({
-      id: m,
-      object: "model",
-      created: Math.floor(Date.now() / 1000),
-      owned_by: m.startsWith("claude") ? "anthropic" : "z-ai",
-      display_name: m,
-    }))
-  });
-});
-
-app.get("/models", authMiddleware, (req, res) => {
-  res.json({ models: knownModels, currentModel: "glm-5" });
-});
+// ═════════════════════════════════════════════════════════════════════════════
+//  ROUTES — OPENAI  /v1/chat/completions
+// ═════════════════════════════════════════════════════════════════════════════
 
 app.post("/v1/chat/completions", authMiddleware, async (req, res) => {
-  const { model = "glm-5", messages, stream = true, deepThink, search, webSearch } = req.body;
+  session.stats.totalRequests++;
+  session.stats.openaiRequests++;
+
+  const { model = "gpt-4o", messages, stream = false, functions, function_call, tools, tool_choice } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json(formatOpenAIError("messages is required and must be an array", "invalid_request_error"));
+    return res.status(400).json(formatOpenAIError("messages is required", "invalid_request_error", 400));
   }
 
   const freshSession = req.headers["x-fresh-session"] === "true";
-  const requestId = generateId();
-  const prompt = messagesToPrompt(messages);
+  const requestId    = generateId();
+  const prompt       = openaiMessagesToPrompt(messages);
 
   if (freshSession) {
     session.messages = [];
-    session.chatId = crypto.randomUUID();
+    session.chatId   = crypto.randomUUID();
   }
 
-  const opts = {
-    model,
-    webSearch: webSearch ?? search ?? session.features.webSearch,
-    thinking: deepThink ?? session.features.thinking,
-    imageGen: session.features.imageGen,
+  const zaiOpts = {
+    model:       resolveZaiModel(model),
+    webSearch:   req.body.webSearch ?? req.body.search ?? session.features.webSearch,
+    thinking:    req.body.deepThink ?? session.features.thinking,
+    imageGen:    session.features.imageGen,
     previewMode: session.features.previewMode,
-    chatId: session.chatId,
-    messages: session.messages,
+    chatId:      session.chatId,
+    messages:    session.messages,
   };
 
+  // ── Streaming ──────────────────────────────────────────────────────────────
   if (stream) {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.flushHeaders();
+    const stopKeepAlive = startSSEResponse(res);
 
-    const initChunk = formatOpenAIResponse({ content: "", finish_reason: null }, model, requestId, true);
-    res.write(`data: ${JSON.stringify(initChunk)}\n\n`);
+    // Initial role delta (OpenAI convention)
+    res.write(`data: ${JSON.stringify({
+      id: `chatcmpl-${requestId}`, object: "chat.completion.chunk",
+      created: Math.floor(Date.now()/1000), model,
+      choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }],
+    })}\n\n`);
 
     let fullContent = "";
     let sentContent = "";
 
-    const keepAlive = setInterval(() => {
-      try {
-        const ka = formatOpenAIResponse({ content: "", finish_reason: null }, model, requestId, true);
-        res.write(`data: ${JSON.stringify(ka)}\n\n`);
-      } catch (e) { clearInterval(keepAlive); }
-    }, 5000);
-
     try {
-      for await (const chunk of sendToZAI(prompt, opts)) {
+      for await (const chunk of streamFromZAI(prompt, zaiOpts)) {
         fullContent += chunk;
         if (hasIncompleteToolCall(fullContent)) continue;
         const delta = fullContent.substring(sentContent.length);
-        if (delta) {
-          sentContent = fullContent;
-          const c = formatOpenAIResponse({ content: delta, finish_reason: null }, model, requestId, true);
-          res.write(`data: ${JSON.stringify(c)}\n\n`);
-        }
+        if (!delta) continue;
+        sentContent = fullContent;
+        res.write(`data: ${JSON.stringify(formatOpenAIResponse(delta, model, requestId, true))}\n\n`);
       }
 
+      // Flush remainder
       const remaining = fullContent.substring(sentContent.length);
-      if (remaining) {
-        const c = formatOpenAIResponse({ content: remaining, finish_reason: null }, model, requestId, true);
-        res.write(`data: ${JSON.stringify(c)}\n\n`);
-      }
+      if (remaining) res.write(`data: ${JSON.stringify(formatOpenAIResponse(remaining, model, requestId, true))}\n\n`);
 
-      const finalChunk = formatOpenAIResponse({ content: "", finish_reason: "stop" }, model, requestId, true, fullContent);
-      res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+      // Final stop chunk
+      res.write(`data: ${JSON.stringify(formatOpenAIResponse("", model, requestId, true, fullContent, "stop"))}\n\n`);
       res.write("data: [DONE]\n\n");
 
       session.messages.push({ role: "user", content: prompt });
       if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
 
     } catch (e) {
-      console.error("[Stream] Error:", e.message);
-      res.write(`data: ${JSON.stringify({ error: { message: e.message } })}\n\n`);
+      session.stats.errors++;
+      console.error("[OpenAI/stream] Error:", e.message);
+      res.write(`data: ${JSON.stringify({ error: { message: e.message, type: "api_error" } })}\n\n`);
       res.write("data: [DONE]\n\n");
     } finally {
-      clearInterval(keepAlive);
+      stopKeepAlive();
       res.end();
     }
 
+  // ── Non-streaming ──────────────────────────────────────────────────────────
   } else {
     try {
-      let fullContent = "";
-      for await (const chunk of sendToZAI(prompt, opts)) {
-        fullContent += chunk;
-      }
+      const fullContent = await collectFromZAI(prompt, zaiOpts);
       session.messages.push({ role: "user", content: prompt });
       if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
-      res.json(formatOpenAIResponse({ content: fullContent }, model, requestId));
+      res.json(formatOpenAIResponse(fullContent, model, requestId, false, prompt));
     } catch (e) {
-      console.error("[API] Error:", e.message);
-      const statusCode = e.message.includes("401") ? 401 : 500;
-      res.status(statusCode).json(formatOpenAIError(e.message));
+      session.stats.errors++;
+      console.error("[OpenAI/sync] Error:", e.message);
+      res.status(e.message.includes("401") ? 401 : 500).json(formatOpenAIError(e.message));
     }
   }
 });
 
-// ============== LEGACY + ADMIN ROUTES ==============
+// ─── OpenAI legacy function-call compatibility ────────────────────────────────
+// POST /v1/chat/completions already handles `functions` / `function_call` since
+// they translate identically from the prompt — OpenAI SDK auto-converts them.
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  ROUTES — MODELS
+// ═════════════════════════════════════════════════════════════════════════════
+
+function buildModelList(owned_by = "z-ai") {
+  const ts = Math.floor(Date.now() / 1000);
+  return KNOWN_MODELS.map(id => ({
+    id,
+    object: "model",
+    created: ts,
+    owned_by: id.startsWith("claude") ? "anthropic" : id.startsWith("gpt") || id.startsWith("o") ? "openai" : "z-ai",
+    display_name: id,
+    capabilities: {
+      vision: false,
+      function_calling: true,
+      json_mode: true,
+      streaming: true,
+    },
+  }));
+}
+
+app.get("/v1/models", authMiddleware, (req, res) => {
+  res.json({ object: "list", data: buildModelList() });
+});
+
+app.get("/v1/models/:id", authMiddleware, (req, res) => {
+  const model = buildModelList().find(m => m.id === req.params.id);
+  if (!model) return res.status(404).json(formatOpenAIError(`Model '${req.params.id}' not found`, "not_found", 404));
+  res.json(model);
+});
+
+app.get("/models", authMiddleware, (req, res) => {
+  res.json({ models: KNOWN_MODELS, current: "glm-5" });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  ROUTES — OPENAI EMBEDDINGS (stub)
+// ═════════════════════════════════════════════════════════════════════════════
+
+app.post("/v1/embeddings", authMiddleware, (req, res) => {
+  const { input, model = "text-embedding-ada-002" } = req.body;
+  const texts = Array.isArray(input) ? input : [input || ""];
+  res.json({
+    object: "list",
+    data: texts.map((t, i) => ({
+      object: "embedding", index: i,
+      embedding: Array.from({ length: 1536 }, () => Math.random() * 0.01 - 0.005),
+    })),
+    model,
+    usage: { prompt_tokens: texts.reduce((a, t) => a + estimateTokens(t), 0), total_tokens: 0 },
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  ROUTES — DIRECT PROMPT (legacy)
+// ═════════════════════════════════════════════════════════════════════════════
 
 app.post("/prompt", authMiddleware, async (req, res) => {
+  session.stats.totalRequests++;
   const { prompt, search, deepThink, webSearch } = req.body;
-  if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+  if (!prompt) return res.status(400).json({ error: "prompt is required" });
+
   const freshSession = req.headers["x-fresh-session"] === "true";
   if (freshSession) { session.messages = []; session.chatId = crypto.randomUUID(); }
+
   try {
-    let fullContent = "";
-    for await (const chunk of sendToZAI(prompt, {
+    const full = await collectFromZAI(prompt, {
       webSearch: webSearch ?? search ?? session.features.webSearch,
-      thinking: deepThink ?? session.features.thinking,
-    })) { fullContent += chunk; }
+      thinking:  deepThink ?? session.features.thinking,
+    });
     session.messages.push({ role: "user", content: prompt });
-    if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
-    res.json({ success: true, response: fullContent });
+    if (full) session.messages.push({ role: "assistant", content: full });
+    res.json({ success: true, response: full });
   } catch (e) {
-    console.error("[Prompt] Error:", e.message);
+    session.stats.errors++;
     res.status(500).json({ success: false, error: e.message });
   }
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  ROUTES — FEATURE MANAGEMENT
+// ═════════════════════════════════════════════════════════════════════════════
+
+app.get("/features", authMiddleware, (req, res) => res.json({ success: true, features: session.features }));
+
 app.post("/features", authMiddleware, (req, res) => {
-  const { webSearch, thinking, imageGen, previewMode } = req.body;
-  if (webSearch  !== undefined) { session.features.webSearch = !!webSearch; session.features.autoWebSearch = !!webSearch; }
-  if (thinking   !== undefined) session.features.thinking   = !!thinking;
-  if (imageGen   !== undefined) session.features.imageGen   = !!imageGen;
-  if (previewMode!== undefined) session.features.previewMode= !!previewMode;
-  console.log("[Features] Updated:", session.features);
+  const { webSearch, thinking, imageGen, previewMode, autoWebSearch } = req.body;
+  if (webSearch     !== undefined) { session.features.webSearch = !!webSearch; session.features.autoWebSearch = !!webSearch; }
+  if (autoWebSearch !== undefined) session.features.autoWebSearch = !!autoWebSearch;
+  if (thinking      !== undefined) session.features.thinking    = !!thinking;
+  if (imageGen      !== undefined) session.features.imageGen    = !!imageGen;
+  if (previewMode   !== undefined) session.features.previewMode = !!previewMode;
+  console.log("[Features]", session.features);
   res.json({ success: true, features: session.features });
 });
 
-app.get("/admin/stats", (req, res) => {
+// ═════════════════════════════════════════════════════════════════════════════
+//  ROUTES — ADMIN
+// ═════════════════════════════════════════════════════════════════════════════
+
+app.get("/status", (req, res) => {
   res.json({
-    mode: "direct",
-    totalClients: session.initialized ? 1 : 0,
-    stats: { totalRequests: Math.floor(session.messages.length / 2) }
+    connected:    session.initialized,
+    userName:     session.userName,
+    userId:       session.userId ? session.userId.substring(0, 8) + "..." : null,
+    feVersion:    session.feVersion,
+    chatId:       session.chatId,
+    messageCount: session.messages.length,
+    features:     session.features,
+    stats:        session.stats,
+    uptime:       Math.floor((Date.now() - session.stats.startTime) / 1000),
+    mode:         "direct",
   });
 });
 
 app.get("/admin/health", (req, res) => {
-  const healthy = session.initialized;
-  res.status(healthy ? 200 : 503).json({ healthy, mode: "direct" });
+  res.status(session.initialized ? 200 : 503).json({ healthy: session.initialized, mode: "direct" });
+});
+
+app.get("/admin/stats", (req, res) => {
+  res.json({ mode: "direct", stats: session.stats, features: session.features });
 });
 
 app.get("/admin/clients", (req, res) => {
@@ -1513,46 +1171,288 @@ app.get("/admin/clients", (req, res) => {
 
 app.post("/admin/session/clear", authMiddleware, (req, res) => {
   session.messages = [];
-  session.chatId = crypto.randomUUID();
-  console.log("[Session] History cleared. New chatId:", session.chatId);
-  res.json({ success: true, message: "Session history cleared", chatId: session.chatId });
+  session.chatId   = crypto.randomUUID();
+  console.log("[Session] Cleared. New chatId:", session.chatId);
+  res.json({ success: true, chatId: session.chatId });
+});
+
+app.post("/admin/session/reinit", authMiddleware, async (req, res) => {
+  try {
+    session.initialized = false;
+    await initializeSession(true);
+    res.json({ success: true, userName: session.userName });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 app.post("/admin/clients/:id/clear", authMiddleware, (req, res) => {
   session.messages = [];
-  session.chatId = crypto.randomUUID();
-  res.json({ success: true, message: "History cleared" });
+  session.chatId   = crypto.randomUUID();
+  res.json({ success: true });
 });
 
-app.get("/inject.js", (req, res) => {
-  res.type("application/json").send(JSON.stringify({ message: "Direct mode" }));
+app.post("/stop", authMiddleware, (req, res) => res.json({ success: true }));
+app.get("/inject.js", (req, res) => res.type("application/json").send(JSON.stringify({ mode: "direct" })));
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  DASHBOARD HTML
+// ═════════════════════════════════════════════════════════════════════════════
+
+app.get("/", (req, res) => {
+  const host = req.headers.host || `localhost:${config.server.port}`;
+  res.send(getDashboardHTML(host));
 });
 
-app.post("/stop", authMiddleware, (req, res) => {
-  res.json({ success: true, message: "Stop acknowledged" });
-});
+function getDashboardHTML(host) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Z.AI Universal Bridge</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap');
+  :root{
+    --bg:#070d14;--surface:#0d1520;--card:#111d2e;--border:#1e3a5f;
+    --accent:#3b82f6;--accent2:#06b6d4;--accent3:#8b5cf6;
+    --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;
+    --text:#e2e8f0;--muted:#64748b;--mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
+  h1{font-size:2rem;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .header{display:flex;align-items:center;gap:16px;margin-bottom:8px}
+  .subtitle{color:var(--muted);font-family:var(--mono);font-size:.85rem;margin-bottom:24px}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:32px}
+  .badge{padding:4px 12px;border-radius:20px;font-size:.75rem;font-weight:600;font-family:var(--mono)}
+  .b-green{background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green)}
+  .b-blue {background:rgba(59,130,246,.15);border:1px solid var(--accent);color:var(--accent)}
+  .b-cyan {background:rgba(6,182,212,.15);border:1px solid var(--accent2);color:var(--accent2)}
+  .b-purple{background:rgba(139,92,246,.15);border:1px solid var(--accent3);color:var(--accent3)}
+  .b-yellow{background:rgba(245,158,11,.15);border:1px solid var(--yellow);color:var(--yellow)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+  .card h2{font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:16px}
+  .stat-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat{background:var(--surface);border-radius:8px;padding:12px;border:1px solid var(--border)}
+  .stat .l{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .stat .v{font-size:1.3rem;font-weight:700;font-family:var(--mono);margin-top:4px}
+  .v-ok{color:var(--green)} .v-err{color:var(--red)} .v-blue{color:var(--accent)} .v-cyan{color:var(--accent2)}
+  .wide{grid-column:1/-1}
+  pre,code{font-family:var(--mono);font-size:.8rem}
+  .codeblock{background:#030810;border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;white-space:pre;color:#93c5fd;margin:10px 0;line-height:1.6}
+  .ep{display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--surface);border-radius:8px;margin-bottom:8px;border:1px solid var(--border)}
+  .method{padding:3px 8px;border-radius:4px;font-size:.7rem;font-weight:700;font-family:var(--mono);flex-shrink:0;margin-top:2px}
+  .get{background:var(--green);color:#000} .post{background:var(--accent);color:#fff}
+  .ep-path{font-family:var(--mono);font-size:.85rem;color:var(--text)}
+  .ep-desc{font-size:.75rem;color:var(--muted);margin-top:3px}
+  .section-label{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent3);margin:16px 0 8px}
+  .toggle-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .toggle-btn{padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:var(--mono);font-size:.75rem;cursor:pointer;transition:.2s}
+  .toggle-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .toggle-btn.active{background:rgba(59,130,246,.15);border-color:var(--accent);color:var(--accent)}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .dot-green{background:var(--green);box-shadow:0 0 6px var(--green)}
+  .dot-red{background:var(--red)}
+</style>
+</head>
+<body>
+<div class="header"><h1>Z.AI Bridge</h1><span class="dot dot-green" id="statusDot"></span></div>
+<div class="subtitle">Universal API Proxy — OpenAI + Anthropic Compatible</div>
+<div class="badges">
+  <span class="badge b-green">⚡ Direct HTTP</span>
+  <span class="badge b-blue">OpenAI compat</span>
+  <span class="badge b-cyan">Anthropic compat</span>
+  <span class="badge b-purple">Tool use</span>
+  <span class="badge b-yellow">Streaming SSE</span>
+</div>
 
-// ============== START SERVER ==============
+<div class="grid">
+  <div class="card">
+    <h2>Session</h2>
+    <div class="stat-row">
+      <div class="stat"><div class="l">Status</div><div class="v" id="sStatus">…</div></div>
+      <div class="stat"><div class="l">User</div><div class="v v-cyan" style="font-size:.95rem" id="sUser">…</div></div>
+      <div class="stat"><div class="l">Messages</div><div class="v v-blue" id="sMsgs">0</div></div>
+      <div class="stat"><div class="l">FE Build</div><div class="v" style="font-size:.75rem" id="sVer">…</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Request Stats</h2>
+    <div class="stat-row">
+      <div class="stat"><div class="l">Total</div><div class="v v-blue" id="stTotal">0</div></div>
+      <div class="stat"><div class="l">OpenAI</div><div class="v v-cyan" id="stOAI">0</div></div>
+      <div class="stat"><div class="l">Anthropic</div><div class="v" style="color:var(--accent3)" id="stANT">0</div></div>
+      <div class="stat"><div class="l">Errors</div><div class="v v-err" id="stErr">0</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Features</h2>
+    <div class="stat-row">
+      <div class="stat"><div class="l">Web Search</div><div class="v" id="fSearch">OFF</div></div>
+      <div class="stat"><div class="l">Thinking</div><div class="v" id="fThink">OFF</div></div>
+      <div class="stat"><div class="l">Image Gen</div><div class="v" id="fImage">OFF</div></div>
+      <div class="stat"><div class="l">Preview</div><div class="v" id="fPrev">OFF</div></div>
+    </div>
+    <div class="toggle-row">
+      <button class="toggle-btn" onclick="toggleFeature('webSearch')">Web Search</button>
+      <button class="toggle-btn" onclick="toggleFeature('thinking')">Thinking</button>
+      <button class="toggle-btn" onclick="toggleFeature('imageGen')">Image Gen</button>
+    </div>
+  </div>
+
+  <div class="card wide">
+    <h2>API Endpoints</h2>
+    <div class="section-label">Anthropic-Compatible (Claude Code, Cursor, etc.)</div>
+    <div class="ep"><span class="method post">POST</span><div><div class="ep-path">/v1/messages</div><div class="ep-desc">Anthropic Messages API — SSE streaming, tool_use blocks, system prompt, vision</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="ep-path">/v1/models</div><div class="ep-desc">Model list — Anthropic + OpenAI + Z.AI IDs unified</div></div></div>
+
+    <div class="section-label">OpenAI-Compatible (Any OpenAI SDK client)</div>
+    <div class="ep"><span class="method post">POST</span><div><div class="ep-path">/v1/chat/completions</div><div class="ep-desc">Chat completions — streaming, tool_calls, function_call, JSON mode</div></div></div>
+    <div class="ep"><span class="method post">POST</span><div><div class="ep-path">/v1/embeddings</div><div class="ep-desc">Embeddings stub (returns random vectors — for compatibility)</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="ep-path">/v1/models/:id</div><div class="ep-desc">Single model details</div></div></div>
+
+    <div class="section-label">Management</div>
+    <div class="ep"><span class="method post">POST</span><div><div class="ep-path">/features</div><div class="ep-desc">Toggle webSearch / thinking / imageGen / previewMode</div></div></div>
+    <div class="ep"><span class="method post">POST</span><div><div class="ep-path">/admin/session/clear</div><div class="ep-desc">Clear conversation history</div></div></div>
+    <div class="ep"><span class="method post">POST</span><div><div class="ep-path">/admin/session/reinit</div><div class="ep-desc">Re-initialize Z.AI session</div></div></div>
+    <div class="ep"><span class="method get">GET</span><div><div class="ep-path">/status</div><div class="ep-desc">Full status JSON</div></div></div>
+  </div>
+
+  <div class="card wide">
+    <h2>Claude Code Setup</h2>
+    <div class="codeblock"># Windows PowerShell
+$env:ANTHROPIC_BASE_URL="http://${host}"
+$env:ANTHROPIC_AUTH_TOKEN="${config.auth.token}"
+$env:ANTHROPIC_API_KEY=""
+claude
+
+# Linux / macOS
+export ANTHROPIC_BASE_URL="http://${host}"
+export ANTHROPIC_AUTH_TOKEN="${config.auth.token}"
+export ANTHROPIC_API_KEY=""
+claude
+
+# ~/.claude/settings.json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://${host}",
+    "ANTHROPIC_AUTH_TOKEN": "${config.auth.token}",
+    "ANTHROPIC_API_KEY": ""
+  }
+}</div>
+
+    <h2 style="margin-top:20px">OpenAI SDK (Python)</h2>
+    <div class="codeblock">from openai import OpenAI
+client = OpenAI(base_url="http://${host}/v1", api_key="${config.auth.token}")
+resp = client.chat.completions.create(
+    model="gpt-4o",  # or "claude-sonnet-4-6", "glm-5", etc.
+    messages=[{"role":"user","content":"Hello!"}],
+    stream=True
+)
+for chunk in resp:
+    print(chunk.choices[0].delta.content or "", end="")</div>
+
+    <h2 style="margin-top:20px">Anthropic SDK (Python)</h2>
+    <div class="codeblock">import anthropic
+client = anthropic.Anthropic(
+    base_url="http://${host}",
+    api_key="${config.auth.token}"
+)
+msg = client.messages.create(
+    model="claude-sonnet-4-6",
+    max_tokens=1024,
+    messages=[{"role":"user","content":"Hello!"}]
+)
+print(msg.content[0].text)</div>
+
+    <h2 style="margin-top:20px">cURL — Anthropic</h2>
+    <div class="codeblock">curl -X POST http://${host}/v1/messages \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: ${config.auth.token}" \\
+  -H "anthropic-version: 2023-06-01" \\
+  -d '{"model":"claude-sonnet-4-6","max_tokens":512,"stream":true,"messages":[{"role":"user","content":"Hello"}]}'</div>
+
+    <h2 style="margin-top:20px">cURL — OpenAI</h2>
+    <div class="codeblock">curl -X POST http://${host}/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${config.auth.token}" \\
+  -d '{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"Hello"}]}'</div>
+  </div>
+</div>
+
+<script>
+  const AUTH = "${config.auth.token}";
+  async function poll() {
+    try {
+      const d = await fetch("/status").then(r=>r.json());
+      const ok = d.connected;
+      document.getElementById("statusDot").className = ok ? "dot dot-green" : "dot dot-red";
+      document.getElementById("sStatus").innerHTML = ok ? '<span class="v-ok">● Online</span>' : '<span class="v-err">○ Offline</span>';
+      document.getElementById("sUser").textContent  = d.userName || "-";
+      document.getElementById("sMsgs").textContent  = d.messageCount;
+      document.getElementById("sVer").textContent   = d.feVersion || "-";
+      document.getElementById("stTotal").textContent = d.stats?.totalRequests || 0;
+      document.getElementById("stOAI").textContent   = d.stats?.openaiRequests || 0;
+      document.getElementById("stANT").textContent   = d.stats?.anthropicRequests || 0;
+      document.getElementById("stErr").textContent   = d.stats?.errors || 0;
+      const f = d.features || {};
+      const fmt = (v) => v ? '<span style="color:var(--green)">ON</span>' : '<span style="color:var(--muted)">OFF</span>';
+      document.getElementById("fSearch").innerHTML = fmt(f.webSearch);
+      document.getElementById("fThink").innerHTML  = fmt(f.thinking);
+      document.getElementById("fImage").innerHTML  = fmt(f.imageGen);
+      document.getElementById("fPrev").innerHTML   = fmt(f.previewMode);
+      // toggle btn active state
+      document.querySelectorAll(".toggle-btn").forEach(b => {
+        const key = b.getAttribute("onclick").match(/'([^']+)'/)?.[1];
+        if (key) b.classList.toggle("active", !!f[key]);
+      });
+    } catch(e) { console.error(e); }
+  }
+
+  async function toggleFeature(key) {
+    const d = await fetch("/status").then(r=>r.json());
+    const cur = d.features?.[key] ?? false;
+    await fetch("/features", {
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+AUTH},
+      body: JSON.stringify({[key]: !cur})
+    });
+    poll();
+  }
+
+  poll();
+  setInterval(poll, 3000);
+</script>
+</body>
+</html>`;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  START
+// ═════════════════════════════════════════════════════════════════════════════
 
 server.listen(config.server.port, config.server.host, async () => {
+  const p = config.server.port;
   console.log(`
-╔═══════════════════════════════════════════════════════════════╗
-║           Z.AI Direct Bridge Server Started                   ║
-╠═══════════════════════════════════════════════════════════════╣
-║  Mode:          DIRECT HTTP (no browser needed)               ║
-║  Dashboard:     http://localhost:${config.server.port}                      ║
-╠═══════════════════════════════════════════════════════════════╣
-║  Anthropic API: http://localhost:${config.server.port}/v1/messages          ║
-║  OpenAI API:    http://localhost:${config.server.port}/v1/chat/completions  ║
-╠═══════════════════════════════════════════════════════════════╣
-║  Auth Token:    ${config.auth.token.padEnd(44)}║
-╠═══════════════════════════════════════════════════════════════╣
-║  Claude Code (no LiteLLM needed):                             ║
-║  set ANTHROPIC_BASE_URL=http://localhost:${config.server.port}              ║
-║  set ANTHROPIC_AUTH_TOKEN=${config.auth.token.padEnd(39)}║
-║  set ANTHROPIC_API_KEY=""    ║ 
-║ claude                                                                   ║
-╚═══════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════╗
+║         Z.AI UNIVERSAL BRIDGE — v2.0                        ║
+╠══════════════════════════════════════════════════════════════╣
+║  Dashboard      : http://localhost:${p}                     ║
+╠══════════════════════════════════════════════════════════════╣
+║  Anthropic API  : http://localhost:${p}/v1/messages         ║
+║  OpenAI API     : http://localhost:${p}/v1/chat/completions ║
+║  Models         : http://localhost:${p}/v1/models           ║
+║  Embeddings     : http://localhost:${p}/v1/embeddings       ║
+╠══════════════════════════════════════════════════════════════╣
+║  Auth Token     : ${config.auth.token}
+╠══════════════════════════════════════════════════════════════╣
+║  ANTHROPIC_BASE_URL  = http://localhost:${p}                ║
+║  ANTHROPIC_AUTH_TOKEN= ${config.auth.token}
+║  OPENAI_BASE_URL     = http://localhost:${p}/v1             ║
+╚══════════════════════════════════════════════════════════════╝
 `);
 
   try {
