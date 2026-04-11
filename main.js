@@ -36,6 +36,36 @@ const session = {
   initializing: false,
 };
 
+// ============== PER-SESSION CONVERSATION STATE ==============
+
+const sessions = new Map(); // sessionId -> { chatId, messages, lastUsed }
+const SESSION_TTL = 30 * 60 * 1000; // 30 minutes
+
+function getOrCreateSession(req) {
+  const sessionId = req.headers["x-session-id"] || "default";
+  const fresh = req.headers["x-fresh-session"] === "true";
+
+  if (fresh || !sessions.has(sessionId)) {
+    sessions.set(sessionId, {
+      chatId: crypto.randomUUID(),
+      messages: [],
+      lastUsed: Date.now(),
+    });
+  }
+
+  const s = sessions.get(sessionId);
+  s.lastUsed = Date.now();
+  return s;
+}
+
+// Periodically clean up stale sessions
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, s] of sessions) {
+    if (now - s.lastUsed > SESSION_TTL) sessions.delete(id);
+  }
+}, 5 * 60 * 1000); // check every 5 minutes
+
 const CORE_INSTRUCTIONS = `CRITICAL INSTRUCTIONS (ALWAYS FOLLOW):
 1. When using tools, ALWAYS output tool calls in XML format like: <tool_call><function=name><parameter=key>value</parameter></function></tool_call>
    NEVER use JSON or markdown code blocks for tool calls.
@@ -446,7 +476,7 @@ function toolCallsToAnthropicBlocks(toolCalls) {
 function formatAnthropicResponse(fullContent, model, requestId) {
   const timestamp = Math.floor(Date.now() / 1000);
   const msgId = `msg_${requestId}`;
-  const toolCalls = parseToolCalls(fullContent);
+  const toolCalls = config.parseTool ? parseToolCalls(fullContent) : [];
   const cleanText = toolCalls.length > 0 ? removeToolCallsFromContent(fullContent) : fullContent;
 
   const contentBlocks = [];
@@ -491,7 +521,7 @@ function sseEvent(event, data) {
  */
 function buildAnthropicStreamEvents(fullContent, model, requestId, inputTokens) {
   const msgId = `msg_${requestId}`;
-  const toolCalls = parseToolCalls(fullContent);
+  const toolCalls = config.parseTool ? parseToolCalls(fullContent) : [];
   const cleanText = toolCalls.length > 0 ? removeToolCallsFromContent(fullContent) : fullContent;
 
   const events = [];
@@ -585,7 +615,7 @@ function formatOpenAIResponse(result, model, requestId, stream = false, fullCont
     }
 
     const contentToCheck = fullContent || rawContent;
-    const toolCalls = parseToolCalls(contentToCheck);
+    const toolCalls = config.parseTool ? parseToolCalls(contentToCheck) : [];
 
     if (toolCalls.length > 0) {
       return {
@@ -615,7 +645,7 @@ function formatOpenAIResponse(result, model, requestId, stream = false, fullCont
     };
   }
 
-  const toolCalls = parseToolCalls(rawContent);
+  const toolCalls = config.parseTool ? parseToolCalls(rawContent) : [];
   const cleanContent = toolCalls.length > 0 ? removeToolCallsFromContent(rawContent) : rawContent;
 
   return {
@@ -832,6 +862,10 @@ async function* sendToZAI(prompt, options = {}) {
     variables: getContextVars(),
     background_tasks: { title_generation: true, tags_generation: true }
   });
+
+  if (config.logging.level === "debug") {
+    console.log("[DEBUG] Z.AI request body:", body);
+  }
 
   let res;
   try {
@@ -1115,9 +1149,9 @@ app.get("/status", (req, res) => {
     userName: session.userName,
     userId: session.userId ? session.userId.substring(0, 8) + "..." : null,
     feVersion: session.feVersion,
-    chatId: session.chatId,
-    messageCount: session.messages.length,
+    activeSessions: sessions.size,
     features: session.features,
+    parseTool: config.parseTool,
     mode: "direct"
   });
 });
@@ -1143,18 +1177,12 @@ app.post("/v1/messages", authMiddleware, async (req, res) => {
     return res.status(400).json(formatAnthropicError("messages is required and must be an array", "invalid_request_error"));
   }
 
-  const freshSession = req.headers["x-fresh-session"] === "true";
+  const reqSession = getOrCreateSession(req);
   const requestId = generateId();
 
   // Build flat prompt from Anthropic messages + system
   const prompt = anthropicMessagesToPrompt(messages, system);
   const inputTokens = estimateTokens(prompt);
-
-  if (freshSession) {
-    session.messages = [];
-    session.chatId = crypto.randomUUID();
-    console.log(`[Session] Fresh session started. New chatId: ${session.chatId}`);
-  }
 
   // Map claude-* model names to a Z.AI model
   // glm-5 is the default capable model; glm-5-turbo for "opus"-level requests
@@ -1171,8 +1199,8 @@ app.post("/v1/messages", authMiddleware, async (req, res) => {
     thinking: session.features.thinking,
     imageGen: session.features.imageGen,
     previewMode: session.features.previewMode,
-    chatId: session.chatId,
-    messages: session.messages,
+    chatId: reqSession.chatId,
+    messages: reqSession.messages,
   };
 
   // ── STREAMING ──
@@ -1215,7 +1243,7 @@ app.post("/v1/messages", authMiddleware, async (req, res) => {
         fullContent += chunk;
 
         // Buffer while a tool call is still being built
-        if (hasIncompleteToolCall(fullContent)) continue;
+        if (config.parseTool && hasIncompleteToolCall(fullContent)) continue;
 
         const delta = fullContent.substring(sentContent.length);
         if (delta) {
@@ -1266,7 +1294,7 @@ app.post("/v1/messages", authMiddleware, async (req, res) => {
       }
 
       // Parse tool calls from complete content and emit as tool_use blocks
-      const toolCalls = parseToolCalls(fullContent);
+      const toolCalls = config.parseTool ? parseToolCalls(fullContent) : [];
       let blockIdx = textBlockIndex + 1;
 
       for (const tc of toolCallsToAnthropicBlocks(toolCalls)) {
@@ -1301,8 +1329,8 @@ app.post("/v1/messages", authMiddleware, async (req, res) => {
       res.write(`data: [DONE]\n\n`);
 
       // Update session history
-      session.messages.push({ role: "user", content: prompt });
-      if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
+      reqSession.messages.push({ role: "user", content: prompt });
+      if (fullContent) reqSession.messages.push({ role: "assistant", content: fullContent });
 
     } catch (e) {
       console.error("[Anthropic Stream] Error:", e.message);
@@ -1321,8 +1349,8 @@ app.post("/v1/messages", authMiddleware, async (req, res) => {
         fullContent += chunk;
       }
 
-      session.messages.push({ role: "user", content: prompt });
-      if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
+      reqSession.messages.push({ role: "user", content: prompt });
+      if (fullContent) reqSession.messages.push({ role: "assistant", content: fullContent });
 
       res.json(formatAnthropicResponse(fullContent, model, requestId));
     } catch (e) {
@@ -1372,14 +1400,9 @@ app.post("/v1/chat/completions", authMiddleware, async (req, res) => {
     return res.status(400).json(formatOpenAIError("messages is required and must be an array", "invalid_request_error"));
   }
 
-  const freshSession = req.headers["x-fresh-session"] === "true";
+  const reqSession = getOrCreateSession(req);
   const requestId = generateId();
   const prompt = messagesToPrompt(messages);
-
-  if (freshSession) {
-    session.messages = [];
-    session.chatId = crypto.randomUUID();
-  }
 
   const opts = {
     model,
@@ -1387,8 +1410,8 @@ app.post("/v1/chat/completions", authMiddleware, async (req, res) => {
     thinking: deepThink ?? session.features.thinking,
     imageGen: session.features.imageGen,
     previewMode: session.features.previewMode,
-    chatId: session.chatId,
-    messages: session.messages,
+    chatId: reqSession.chatId,
+    messages: reqSession.messages,
   };
 
   if (stream) {
@@ -1414,7 +1437,7 @@ app.post("/v1/chat/completions", authMiddleware, async (req, res) => {
     try {
       for await (const chunk of sendToZAI(prompt, opts)) {
         fullContent += chunk;
-        if (hasIncompleteToolCall(fullContent)) continue;
+        if (config.parseTool && hasIncompleteToolCall(fullContent)) continue;
         const delta = fullContent.substring(sentContent.length);
         if (delta) {
           sentContent = fullContent;
@@ -1433,8 +1456,8 @@ app.post("/v1/chat/completions", authMiddleware, async (req, res) => {
       res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
       res.write("data: [DONE]\n\n");
 
-      session.messages.push({ role: "user", content: prompt });
-      if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
+      reqSession.messages.push({ role: "user", content: prompt });
+      if (fullContent) reqSession.messages.push({ role: "assistant", content: fullContent });
 
     } catch (e) {
       console.error("[Stream] Error:", e.message);
@@ -1451,8 +1474,8 @@ app.post("/v1/chat/completions", authMiddleware, async (req, res) => {
       for await (const chunk of sendToZAI(prompt, opts)) {
         fullContent += chunk;
       }
-      session.messages.push({ role: "user", content: prompt });
-      if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
+      reqSession.messages.push({ role: "user", content: prompt });
+      if (fullContent) reqSession.messages.push({ role: "assistant", content: fullContent });
       res.json(formatOpenAIResponse({ content: fullContent }, model, requestId));
     } catch (e) {
       console.error("[API] Error:", e.message);
@@ -1467,16 +1490,17 @@ app.post("/v1/chat/completions", authMiddleware, async (req, res) => {
 app.post("/prompt", authMiddleware, async (req, res) => {
   const { prompt, search, deepThink, webSearch } = req.body;
   if (!prompt) return res.status(400).json({ error: "Prompt is required" });
-  const freshSession = req.headers["x-fresh-session"] === "true";
-  if (freshSession) { session.messages = []; session.chatId = crypto.randomUUID(); }
+  const reqSession = getOrCreateSession(req);
   try {
     let fullContent = "";
     for await (const chunk of sendToZAI(prompt, {
       webSearch: webSearch ?? search ?? session.features.webSearch,
       thinking: deepThink ?? session.features.thinking,
+      chatId: reqSession.chatId,
+      messages: reqSession.messages,
     })) { fullContent += chunk; }
-    session.messages.push({ role: "user", content: prompt });
-    if (fullContent) session.messages.push({ role: "assistant", content: fullContent });
+    reqSession.messages.push({ role: "user", content: prompt });
+    if (fullContent) reqSession.messages.push({ role: "assistant", content: fullContent });
     res.json({ success: true, response: fullContent });
   } catch (e) {
     console.error("[Prompt] Error:", e.message);
@@ -1495,10 +1519,13 @@ app.post("/features", authMiddleware, (req, res) => {
 });
 
 app.get("/admin/stats", (req, res) => {
+  let totalMessages = 0;
+  for (const s of sessions.values()) totalMessages += s.messages.length;
   res.json({
     mode: "direct",
     totalClients: session.initialized ? 1 : 0,
-    stats: { totalRequests: Math.floor(session.messages.length / 2) }
+    activeSessions: sessions.size,
+    stats: { totalRequests: Math.floor(totalMessages / 2) }
   });
 });
 
@@ -1512,15 +1539,13 @@ app.get("/admin/clients", (req, res) => {
 });
 
 app.post("/admin/session/clear", authMiddleware, (req, res) => {
-  session.messages = [];
-  session.chatId = crypto.randomUUID();
-  console.log("[Session] History cleared. New chatId:", session.chatId);
-  res.json({ success: true, message: "Session history cleared", chatId: session.chatId });
+  sessions.clear();
+  console.log("[Session] All session histories cleared.");
+  res.json({ success: true, message: "All session histories cleared", activeSessions: 0 });
 });
 
 app.post("/admin/clients/:id/clear", authMiddleware, (req, res) => {
-  session.messages = [];
-  session.chatId = crypto.randomUUID();
+  sessions.clear();
   res.json({ success: true, message: "History cleared" });
 });
 
