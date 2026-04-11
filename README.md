@@ -2,8 +2,8 @@
 
 > OpenAI & Anthropic-compatible API proxy for [chat.z.ai](https://chat.z.ai) — available in two modes.
 
-> ⚠️ **Warning**: If you are getting error 405, it means Z.ai has blocked you for abusing the web UI models through unofficial API usage.  
-> **Best practice**: Stop sending requests, wait, and do not send prompts longer than 40,000 characters.
+> ⚠️ **Warning**: If you are getting error 405, it means Z.ai has blocked your IP Address for abusing the web UI models through unofficial API usage.  
+> **Best practice**: Be chill, stop sending requests, wait, and do not send prompts longer than 60,000 characters.
 
 ## Overview
 
