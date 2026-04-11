@@ -68,6 +68,9 @@ module.exports = {
     maxReconnectAttempts: parseInt(process.env.WS_MAX_RECONNECT) || 10,
   },
 
+  // Tool call parsing (set PARSE_TOOL=false to disable)
+  parseTool: process.env.PARSE_TOOL === 'true',
+
   // Logging
   logging: {
     // Log level: 'debug', 'info', 'warn', 'error'
