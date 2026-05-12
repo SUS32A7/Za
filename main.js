@@ -973,7 +973,10 @@ async function* sendToZAI(prompt, options = {}) {
   const body = JSON.stringify(requestBody);
 
   if (config.logging.level === "debug") {
+    console.log("[DEBUG] Z.AI url", url);
     console.log("[DEBUG] Z.AI request body:", body);
+    console.log("[DEBUG] Z.AI request headers", JSON.stringify(headers, null, 2));
+    
   }
 
   let res;
