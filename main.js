@@ -866,8 +866,6 @@ async function initializeSession() {
     await scrapeConfig();
 
     const headers = {
-      "Origin": BASE_URL,
-      "Referer": `${BASE_URL}/`,
       "Content-Type": "application/json"
     };
 
