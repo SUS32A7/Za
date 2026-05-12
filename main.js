@@ -918,23 +918,7 @@ async function initializeSession() {
   }
 }
 
-function getContextVars() {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, "0");
-  const date = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  return {
-    "{{USER_NAME}}": session.userName,
-    "{{USER_LOCATION}}": "Unknown",
-    "{{CURRENT_DATETIME}}": `${date} ${time}`,
-    "{{CURRENT_DATE}}": date,
-    "{{CURRENT_TIME}}": time,
-    "{{CURRENT_WEEKDAY}}": days[now.getDay()],
-    "{{CURRENT_TIMEZONE}}": "Europe/Paris",
-    "{{USER_LANGUAGE}}": "en-US"
-  };
-}
+
 
 async function* sendToZAI(prompt, options = {}) {
   const {
@@ -983,9 +967,7 @@ async function* sendToZAI(prompt, options = {}) {
       preview_mode: previewMode,
       flags: [],
       enable_thinking: thinking
-    },
-    variables: getContextVars(),
-    background_tasks: { title_generation: true, tags_generation: true }
+    }
   };
 
   const body = JSON.stringify(requestBody);
