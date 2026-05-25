@@ -5,7 +5,7 @@ An OpenAI- and Anthropic-compatible API proxy for [chat.z.ai](https://chat.z.ai)
 ---
 
 ## ⚠️ Important: Project Under Maintenance
-Z.Ai enforced a captcha system recently so current implementation seems useless againts it I have been working to fix it and my findings are listed in [Report.md](../Captcha_Report.md) Yet Still The final piece left is data generation which is very difficult so the project will be on Pause
+Z.Ai enforced a captcha system recently so current implementation seems useless againts it I have been working to fix it and my findings are listed in [Report.md](https://github.com/izaart95-jpg/GLM-Free-API/blob/main/Captcha_Report.md) Yet Still The final piece left is data generation which is very difficult so the project will be on Pause
 
 ## ⚠️ Important: Model Access & Authentication
 
