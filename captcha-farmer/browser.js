@@ -2,6 +2,7 @@ import http from 'node:http';
 import { chromium } from 'playwright-core';
 import * as cloak from 'cloakbrowser';
 
+// ─── Config ───
 const PORT = Number(process.env.PORT || 9876);
 const HOST = process.env.HOST || '127.0.0.1';
 const CHROMIUM_PATH = process.env.CHROMIUM_PATH || '/usr/bin/chromium';
@@ -9,12 +10,16 @@ const SECRET = process.env.SECRET || '';
 const ZAI_URL = 'https://chat.z.ai/';
 const SCENE_ID = 'didk33e0';
 
+// BROWSER_BACKEND: 'cloak' | 'playwright'
+// CloakBrowser 
 const BROWSER_BACKEND = process.env.BROWSER_BACKEND || 'cloak';
 
-const POOL_SIZE = Number(process.env.POOL_SIZE || 5);
+// Token 
+const POOL_SIZE = Number(process.env.POOL_SIZE || 5);       
 const TOKEN_TTL = Number(process.env.TOKEN_TTL || 240000);
 const REFILL_INTERVAL = Number(process.env.REFILL_INTERVAL || 3000);
 
+// ─── State ───
 let browser = null;
 let context = null;
 let page = null;
@@ -22,14 +27,17 @@ let ready = false;
 let lastError = '';
 let stats = { served: 0, errors: 0, refills: 0 };
 
+// Token 
 const tokenPool = [];
 let refilling = false;
 
+// ─── Browser lifecycle ───
 
 async function launchBrowser() {
   console.log(`[provider] Initializing browser backend: ${BROWSER_BACKEND}`);
 
   if (BROWSER_BACKEND === 'cloak') {
+    // CloakBrowser
     try {
       const test = await cloak.launch({ headless: true });
       const v = await test.version();
@@ -60,6 +68,7 @@ async function launchBrowser() {
     }
     browser = await chromium.launch(launchOpts);
 
+    // playwright
     context = await browser.newContext({
       viewport: { width: 1920, height: 1080 },
       locale: 'zh-CN',
@@ -67,6 +76,7 @@ async function launchBrowser() {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
     });
 
+    // Stealth patches
     await context.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => false });
       Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
@@ -86,6 +96,7 @@ async function launchBrowser() {
   ready = true;
 }
 
+// ─── Token acquisition ───
 async function acquireToken() {
   let localBrowser;
 
@@ -131,6 +142,7 @@ async function acquireToken() {
     await freshPage.goto(ZAI_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await freshPage.waitForTimeout(3000);
 
+    // captcha SDK
     await freshPage.evaluate(async () => {
       if (typeof window.initAliyunCaptcha === 'function') return;
       window.AliyunCaptchaConfig = { region: 'cn', prefix: 'no8xfe' };
@@ -165,8 +177,8 @@ async function acquireToken() {
           window.initAliyunCaptcha({
             SceneId: sceneId,
             mode: 'popup',
-            element: `
-            button: `
+            element: `#${id}`,
+            button: `#${triggerId}`,
             language: 'cn',
             timeout: 10000,
             delayBeforeSuccess: false,
@@ -188,6 +200,7 @@ async function acquireToken() {
   }
 }
 
+// ─── Token pool management ───
 
 function getValidToken() {
   const now = Date.now();
@@ -226,6 +239,7 @@ async function refillPool() {
   }
 }
 
+// ─── HTTP Server ───
 
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
@@ -280,9 +294,10 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { error: 'Use GET /token or GET /health' });
 });
 
+// ─── Start ───
 
 server.listen(PORT, HOST, async () => {
-  console.log(`[provider] zai-captcha-provider listening on http:
+  console.log(`[provider] zai-captcha-provider listening on http://${HOST}:${PORT}`);
   console.log(`[provider] Pool size: ${POOL_SIZE}, TTL: ${TOKEN_TTL}ms`);
   try {
     await launchBrowser();
