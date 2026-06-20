@@ -103,7 +103,7 @@ async function acquireToken() {
   if (BROWSER_BACKEND === 'cloak') {
     const opts = {
       headless: true,
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
     };
     const proxyURL = process.env.PROXY_SERVER || process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
     if (proxyURL) opts.proxy = { server: proxyURL };
@@ -130,19 +130,21 @@ async function acquireToken() {
       viewport: { width: 1920, height: 1080 },
       locale: 'zh-CN',
       timezoneId: 'Asia/Shanghai',
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
     });
+    
     await localCtx.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => false });
       Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
       Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en-US', 'en'] });
       window.chrome = { runtime: {}, loadTimes: () => ({}) };
     });
+    
     const freshPage = await localCtx.newPage();
     await freshPage.goto(ZAI_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await freshPage.waitForTimeout(3000);
 
-    // captcha SDK
+    // 1. Inject Aliyun Captcha SDK
     await freshPage.evaluate(async () => {
       if (typeof window.initAliyunCaptcha === 'function') return;
       window.AliyunCaptchaConfig = { region: 'cn', prefix: 'no8xfe' };
@@ -156,50 +158,79 @@ async function acquireToken() {
     });
     await freshPage.waitForTimeout(1000);
 
-    const token = await freshPage.evaluate(async (sceneId) => {
+    // 2. Build Captcha Containers and setup callbacks in page context
+    const elementIds = await freshPage.evaluate(async (sceneId) => {
       if (typeof window.initAliyunCaptcha !== 'function') {
         throw new Error('initAliyunCaptcha not available after injection');
       }
+      
       const id = 'c-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
       const triggerId = 't-' + id;
+      
       const container = document.createElement('div');
       container.id = id;
-      container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;';
+      // Stealth Layout: Visible in viewport layout, but transparent to satisfy browser checks
+      container.style.cssText = 'position:fixed; bottom:15px; right:15px; width:320px; height:90px; z-index:999999; opacity:0.01; pointer-events:none;';
       document.body.appendChild(container);
+      
       const trigger = document.createElement('button');
       trigger.id = triggerId;
-      trigger.style.cssText = 'display:none;';
+      trigger.style.cssText = 'width:100%; height:100%; background:transparent; border:none; cursor:pointer; pointer-events:auto;';
       container.appendChild(trigger);
 
-      try {
-        return await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('captcha timeout')), 25000);
-          window.initAliyunCaptcha({
-            SceneId: sceneId,
-            mode: 'popup',
-            element: `#${id}`,
-            button: `#${triggerId}`,
-            language: 'cn',
-            timeout: 10000,
-            delayBeforeSuccess: false,
-            success: (token) => { clearTimeout(timeout); resolve(token); },
-            fail: () => {},
-            onError: (err) => { clearTimeout(timeout); reject(new Error('captcha error: ' + JSON.stringify(err))); },
-            onClose: () => {},
-          });
-          setTimeout(() => trigger.click(), 200);
-        });
-      } finally {
-        try { container.remove(); } catch {}
-      }
+      window.captchaResult = null; // Reset page state
+
+      window.initAliyunCaptcha({
+        SceneId: sceneId,
+        mode: 'popup',
+        element: `#${id}`,
+        button: `#${triggerId}`,
+        language: 'cn',
+        timeout: 10000,
+        delayBeforeSuccess: false,
+        success: (token) => { window.captchaResult = { status: 'success', token }; },
+        fail: () => { window.captchaResult = { status: 'fail' }; },
+        onError: (err) => { window.captchaResult = { status: 'error', error: err }; },
+        onClose: () => { window.captchaResult = { status: 'closed' }; },
+      });
+
+      return { triggerId, containerId: id };
     }, SCENE_ID);
 
-    return token;
+    await freshPage.waitForTimeout(500);
+
+    // 3. Simulate hardware human inputs outside evaluation block
+    const triggerSelector = `#${elementIds.triggerId}`;
+    
+    // Humanized mouse glides before physical hardware hover and click actions
+    await freshPage.mouse.move(500, 500);
+    await freshPage.waitForTimeout(150);
+    
+    // Hardware Click event (yields isTrusted: true)
+    await freshPage.click(triggerSelector, { delay: 100 });
+
+    // 4. Safely monitor state variables in Node context
+    const result = await freshPage.waitForFunction(() => {
+      return window.captchaResult;
+    }, { timeout: 20000 }).then(handle => handle.jsonValue());
+
+    // 5. Cleanup DOM elements
+    await freshPage.evaluate((ids) => {
+      try { document.getElementById(ids.containerId).remove(); } catch(e) {}
+    }, elementIds);
+
+    if (result.status === 'success') {
+      return result.token;
+    } else if (result.status === 'error') {
+      throw new Error(`Captcha Error Callback: ${JSON.stringify(result.error)}`);
+    } else {
+      throw new Error(`Captcha Verification Failed Status: ${result.status}`);
+    }
+
   } finally {
     try { await localBrowser.close(); } catch {}
   }
 }
-
 // ─── Token pool management ───
 
 function getValidToken() {
