@@ -2,8 +2,79 @@
 `Bytecode: F`
 `Interpreter: P`
 `String Pool: V`
-`OPCode:0`
+`OPC:0`
 `ez: {r:1}`
+
+## The VM dispatch machine, explained
+The function `t(n, e, r, i, a, o)` is a **stack-based bytecode interpreter**. Its instruction set:
+
+| Opcode | Mnemonic | What it does? |
+|--------|----------|---------------|
+| `43` | `PUSH_C` | Push `V[r[n++]]` (a constant from the pool) |
+| `33` | `LOAD_VAR` | Push `scope[V[idx]]` | 
+| `27` | `SET_PROP` | `scope[key] = value` |
+| `56` | `GET_PROP` | Push `obj[key]` |
+| `50` | `CALL_M` | Call method: `obj[method](...args)` |
+| `55` |`BUILD_ARR` | Pop N items → push Array |
+| `7` | `MAKE_FUNC` | Create closure at bytecode entry-point |
+| `37/6` | CALL_WH/IFCall | sub-block (looping or once) |
+| `23/20/38`| `XOR/AND/OR` | Bitwise ops | 
+| `49` | `BIND_ARGS` | Bind function parameters from stack into scope |
+
+The `CALL_WH`/`CALL_IF` pattern is how all loops are encoded — a sub-function is called repeatedly until it returns a non-`undefined` sentinel (`RET_VAL inline_val=1`).
+
+---
+
+## Full algorithm, decompiled from bytecode
+The VM runs `c.y(o, r)` (PC 15989–16838) where `o` = JSON input string, `r` = salt string.
+### **Phase 1 — UTF-8 encode** (PC 16007)
+```js
+o = unescape(encodeURIComponent(inputStr));  // multi-byte → byte string
+a = o.length;   // UTF-8 byte length
+m = r.length;   // salt string length
+```
+### **Phase 2 — State init** (PC 16067): 16-byte S-box seeded as `e[i] = (i << 4) + (i % 16)` → `[0, 17, 34 … 255]`. `f = 16`.
+### **Phase 3 — KSA** (PC 16139): a non-standard key schedule using both `e[i]` and `e[j]`:
+```js
+j = (((i + j + e[i] + e[j]) >> 1) + r.charCodeAt(i % m)) & (f-1);
+swap(e[i], e[j]);
+```
+### **Phase 4 — PRGA** (PC 16313): stream absorption with the input bytes:
+```js
+q = ((p ^ q) + (e[p] ^ e[q])) & (f-1);
+swap(e[p], e[q]);
+C = o.charCodeAt(idx);
+C = (C + p + q) ^ e[p] ^ e[q];   // post-swap e[p], e[q]
+C = C & 255;
+e[p] = C;
+p = (p + 1) & (f-1);
+```
+### **Phase 5 — Final diffusion** (PC 16592): a chain XOR pass done twice:
+```js
+for step in [0 .. 2f-1]:
+    pos = step % f
+    if pos:  e[pos] ^= e[pos-1]
+    else:    e[0]   ^= e[f-1]
+```
+### **Phase 6 — Hex encode**: `e.map(b => (b<16?'0':'')+b.toString(16)).join('')`
+
+---
+## The salt "mystery" solved
+The salt is used raw as a string via `r.charCodeAt(i % m)` — **no `parseInt` is ever called inside the hash**. The "all-zeros salts give the same result" observation is pure arithmetic:
+- `charCodeAt('0') = 48`. When every salt byte is `48`, the KSA adds `48` at each step and masks to `& 15`, which gives a **fixed permutation** regardless of how many zeros you use.
+- `'0010'` has charCode `49` at position 2, which shifts `j` differently → different permutation → different hash.
+- `'0000000000001'` has a `'1'` at the end, but because `i % m` cycles through all positions including that last one, the `49` gets incorporated.
+
+---
+
+#### Intermediate state proof
+```
+Phase 1 init:  [0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255]
+Phase 2 KSA:   [204, 136, 238, 51, 34, 170, 17, 68, 85, 187, 102, 119, 0, 153, 255, 221]
+Phase 3 PRGA:  [124, 71, 124, 64, 121, 174, 192, 6, 239, 13, 81, 37, 246, 124, 126, 155]
+Phase 4 diff:  [147, 51, 239, 115, 150, 221, 86, 219, 185, 214, 232, 243, 30, 143, 96, 20]
+Hex output:    9333ef7396dd56dbb9d6e8f31e8f6014  ✓
+```
 
 ## Architecture Overview
 The bytecode is split into two completely separate concerns inside one function body:
