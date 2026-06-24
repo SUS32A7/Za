@@ -1,13 +1,11 @@
 # Aliyun CaptchaJS Information Report 
 
-# Part 1: Obfuscation & Deobfuscation of literals 
+# Obfuscation & Deobfuscation of literals [File:AliyunCaptcha.js] 
 
-Starting with,right below 
+Starting with 
 ```javascript
-var G = rr;
-// I added 
-window.__G = G = rr;
-// So i can use it from browser console
+var G = rr; // <- Deobfuscator function
+window.__G = G = rr; // Added proxy to access it globally 
 ```
 
 ### Function rr Defintion 
@@ -71,6 +69,7 @@ function rr(t, r) {
 
 
 ```javascript
+// Jt.prototype
 Jt[G(547) + "e"] = {
             ENDPOINTS: [G(525) + G(417) + G(473) + G(405) + G(578)],
             CN_DEFAULT_ENDPOINTS: [G(525) + G(417) + G(473) + G(405) + G(578)],
@@ -142,14 +141,14 @@ Jt[G(547) + "e"] = {
 
 
 #### Deobfuscation examples
-```AliyunCaptcha.js
+```js
 var G = rr;
 window.__G = G;
 ```
-```cosnole
+```js
 var G = window.__G;
 ```
-```console
+```js
 PLATFORM: G(398) + "c"
 'W.10001.c'
 
@@ -230,7 +229,7 @@ console.log(DEVICE_TYPE);
 
 ---
 
-## Part 2: Functions , Definitions & Variables
+## Functions , Definitions & Variables [AliyunCaptcha.js]
 
  ```javascript  
    function me(t, r) {
@@ -493,7 +492,7 @@ parse: function(t) {
                     }
 
 
-window.__ae
+window.__ae // Base64 encoder/decoder?
 {
     "_map": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
     "_reverseMap": [
@@ -766,7 +765,7 @@ console.log(Ee)
 
 ---
 
-### Part 3: Function Re internals
+### Function Re internals [AliyunCaptcha.js]
 
 ```javascript
 var nr = new Jt({});
@@ -837,11 +836,6 @@ _extend: function(t) {
             }
 ```
 	    
-
-I have already reverse engineered ye(o,c) from function Re and decryption script is ready and it works
-I didnt write full report how ye works;
-If you want can you write a reverse engineered human readable variant of ye and a report along with it 
-
 #### Decryption Script
 
 ```python3
@@ -894,7 +888,7 @@ Script is working
 
 ---
 
-## Part 4: Information of Rt in context of Rt.appkey
+## Information of Rt in context of Rt.appkey [AliyunCaptcha.js]
 ```json
 {
     "appName": {
@@ -1105,7 +1099,7 @@ Nt[G(423)][G(520)] = G(337) + G(589) + G(588) + G(455);
 
 ---
 
-## Part 5: Function rr index deobfuscated literals json log
+## Function rr index deobfuscated literals json log [AliyunCaptcha.js]
 
 ```json
 {
@@ -1397,7 +1391,7 @@ Nt[G(423)][G(520)] = G(337) + G(589) + G(588) + G(455);
 ```
 ---
 
-## Part 6: Function Re reverse engineered DeviceData creation 
+## Function Re reverse engineered DeviceData creation [AliyunCaptcha.js]
 
 Function Re generates DeviceData which is sent in function Pe
 
@@ -1782,7 +1776,7 @@ if __name__ == "__main__":
         print(f"  {k:15s}: {v}")
 ```
 
-## Part 7: Signature and Nonce generation
+## Signature and Nonce generation [AliyunCaptcha.js]
 
 Every request is signed with a HMAC-SHA1 Signature and Signature Nonce
 
@@ -2035,7 +2029,7 @@ console.log("Generated params with signature:", params);
 
 ---
 
-## Part 8: CaptchaFlow
+## Traceless CaptchaFlow
 ### 1. AliyunCaptccha.js Loads
 
 ### 2. Loads fielin.*.js
@@ -2050,15 +2044,6 @@ fetch request
 fetch("https://no8xfe.captcha-open-southeast.aliyuncs.com/", {
   "headers": {
     "accept": "*/*",
-    "accept-language": "en-US,en;q=0.9,ur-IN;q=0.8,ur-PK;q=0.7,ur;q=0.6",
-    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "priority": "u=1, i",
-    "sec-ch-ua": "\"Not-A.Brand\";v=\"24\", \"Chromium\";v=\"146\"",
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": "\"Linux\"",
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "cross-site"
   },
   "body": "AccessKeyId=LTAI5tSEBwYMwVKAQGpxmvTd&SignatureMethod=HMAC-SHA1&SignatureVersion=1.0&Format=JSON&Timestamp=2026-05-25T02%3A42%3A52Z&Version=2023-03-05&Action=InitCaptchaV3&SceneId=didk33e0&Language=en&Mode=popup&UpLang=true&DeviceData=TEQYvgJq1LrMqFaBybfIzPxz2ygFyAct7X%2Fw%2BLacfXWd9rGSwE%2Fx6ZCONucD1fehS2Qpig6tUVsFK111d9wIk5pWp6rwYjzFCRgL7pNp8bzGsvOSdUXgQTopQm90YPSdCiRAlgENdODLvY7P8jrfO9eC15tPCPwLxcRIrcspVvQYqVfk9%2FyFeIlePKmTRjkM&SignatureNonce=9aab2319-86bf-4019-839e-82225f796296&Signature=UDiQcb82lN5kZT0ZPNOmw0hT8sw%3D",
   "method": "POST",
@@ -2111,24 +2096,17 @@ for StaticPath 3.25.0/pe.050.9453665072ad79a7 it loads
 
 https://g.alicdn.com/captcha-frontend/dynamicJS/3.25.0/pe.050.9453665072ad79a7.js
 
-The javascript calculates data field which is very hard tor reverse engineer
+The javascript calculates captcha payload  (data) field sent in verifycaptchav3
 
 Btw all javasripts calculates data in same way just function names are variables are renamed
 using mitmproxy i tested to use a single js every time and it works
-### 3. VerifyCaptchaV3
+
+
+### 4. VerifyCaptchaV3
 ```javascript
 fetch("https://no8xfe.captcha-open-southeast.aliyuncs.com/", {
   "headers": {
     "accept": "*/*",
-    "accept-language": "en-US,en;q=0.9,ur-IN;q=0.8,ur-PK;q=0.7,ur;q=0.6",
-    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "priority": "u=1, i",
-    "sec-ch-ua": "\"Not-A.Brand\";v=\"24\", \"Chromium\";v=\"146\"",
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": "\"Linux\"",
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "cross-site"
   },
   "body": "AccessKeyId=LTAI5tSEBwYMwVKAQGpxmvTd&SignatureMethod=HMAC-SHA1&SignatureVersion=1.0&Format=JSON&Timestamp=2026-05-25T02%3A43%3A00Z&Version=2023-03-05&Action=VerifyCaptchaV3&SceneId=didk33e0&CertifyId=gl62Aqi6e1&CaptchaVerifyParam=%7B%22sceneId%22%3A%22didk33e0%22%2C%22certifyId%22%3A%22gl62Aqi6e1%22%2C%22deviceToken%22%3A%22U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2Q0LWgtMTc3OTY3Njk3NzYzMC1kMjA1YTU2MjFmMTY0NDA2YjI5ZTQyMGRkNTUxMzI1MSM3dTU1SjBYc09Uc1IzaXVKS0Zhb09kY1dwVEtxcDBsN2NlRTBHd3VhVy9UVjZ4ZnpVWVhBMWtZQnNWR2pza3A1MW0wak9lMDNadFdHdDV6b3pTOElNOEFPR21ydHUwbnU2ZDdWZUlLbVIrMzNPVkZUYW1VcGtRK0VtVHBTQ1NMa3ZjcXB0NDdFTXdyOFNOMW42SnpWZ0sxMDN6QzA1Q1g1T1Y1bnBSV3hZREdzUFhRVnpTcytxWEFqczhJS3ZiU1dZb0tUNVFFM2ZVR2ZwamNlclNoaWkzSG50OU0ySmlmWmd2amxzSlowYVNqQ0JiL1kwTGlGUlRST1I2Y2FydThMbEdPTFA4TUUxem9hQ1JKWjlSeEE3ekcyVjRmdnBBa0tsU1U4aFZTVkpDMHl2N1ZCaFhuSDMrSWFTWUh1TitRR00vdndoYllqOVNPVUZhQjJDYllQU0xpandobS9HTk1QcVBBQ2xVNllNQndDTVRuYk40MDJmTVorRTVTVVU0eGNXYnBvTnJhdlg1MDVLbktUTEcwbGVmTmpmZVd4VThDL1doWDBVQ1FjZXl1S1owMjM1QjFlZys2cEI3Y2RFR0ZML2xkRTY5VzlkN1U3bzRMYnVYT1IwemZWeDlQKzhmNStBL3dySmZyZXcrSkJBelE4Wm8zYkxScEtac2RjMFZpSENza2ZQeUkwWSsyQStCaHpvd0Q4QXdMQ2tIZisyZ2tBK2xVaGdyRGhEcWlqNU5nL21YSTdwdVFEbUJkRjFKUllzY3ZCbU53OUt4T09xQVBMN2tvaFRqZGw4TjljWUVTdm0zRTQ0bEJ5d21WZEQyOVFmeWwzOWYrbmlHdlJGc0lDaDJMK3ZIMStlTFNBN3B4MFpWV2pMUVI1eUpyeHZ0eUxQVVgxQ2JpZE9FNkp1bEZpd1BpbnlYK0RvTHBEQVZTdnFqRjNWMVY5bVJtMjVqL1YwaDBhMkhkWWV1UTNQNlVOWUtDNk1wc3BPM2JqMmdSR1J1VDA2V050NVRmZWdETWNWeWVFeEZpYWxPWHZia3dhbjZ3ZWYvbEVGUHF3RUVPZ1ROWDAxdEtXUm1VNWxSOGJKQVdjaUhCTnJQOEpOY0FyMGV0Z2xjd1RxVVhOTngrZ2xrYzdkMzJ3Zk5tZ1BCUjV3Q3h3NjdIWTUzVTI3dHNQMjRVVHVOaGc3SkhjNk5kdDBmQ0JvUDRXdmxpaFdEbFBQQ3Vic1FObFZBS1VYZ0JoYUFDMUVMbmt0Ukt6eEZXNWJ1TzlTOUVDT0RBQWdTNVBrZzIzVldpRTJCOW9DbkFyRERpdVpwZDY4bUpHdnljemdZeXFhd0pWSlp6TzVoaTNoazkvNDdlcy85dExGbzAvMmlmcTVTS01kRTdhVkZlNnRtREVCdz09IzAjN2JkNzMyZDIwZTc1NmEyNmY0OTU1ZGJhYjU4MjhjOWE%3D%22%2C%22data%22%3A%22JRMlgg0gDgVASQIXRQRNMFsDRJoGeSB5eQp9YWNPH%2Fw6iT2%2B96hKSApjEY9S1AZt4rwnZQKgGGOjoeIYWpEaAJdJFhEbK15pcCcKYi0%2FNEgaXU4YLj19be54MEMWEBqDqzmjFdV5KuAcSYQ%2FYWYLNeJ3jZ8VzTdU%2FwO4QqMVb8BXhzAENTBkSQ1iXQhwvkMi01UB7yClAj59DW9NKmNkaj1eS%2BQpfSlvKJ1iF2IXEDcbqi4rbP%2B3BDaUnxMkbo0aLSs8RXxbQH8%3D%22%7D&SignatureNonce=bae00c65-c089-41fc-a704-84576ebea034&Signature=azbdVXlzzucKOIz1kICXOmafPJg%3D",
   "method": "POST",
@@ -2154,7 +2132,7 @@ fetch("https://no8xfe.captcha-open-southeast.aliyuncs.com/", {
 ```
 
 
-### 4. captcha_verify_param generation and usage
+### 5. captcha_verify_param generation and usage
 
 captcha_verify_param is base64 encoded string which contains scene id certify id and token and is snet in completions requests
 ```base64
@@ -2165,7 +2143,7 @@ eyJjZXJ0aWZ5SWQiOiJnbDYyQXFpNmUxIiwic2NlbmVJZCI6ImRpZGszM2UwIiwiaXNTaWduIjp0cnVl
 ```
 
 
-## Part 9: Verify Captcha payload generation
+## Verify Captcha payload generation [pe.*.*.js]
 
 ### The request
 
@@ -2194,7 +2172,7 @@ fetch("https://no8xfe.captcha-open-southeast.aliyuncs.com/", {
 ```json
 "data":"JRMlgg03DgRAeAILRQpEEHPjZZg9Ez1fbA0qd1yjNhsriXK5OHh3ZgkJc2NaO+pbP7wtcQGL6Gvi5LEZqOMpPHYyKHIfAmJWGUMiBRsQD0kkUUkiCA1Jd8BAFFEFUmL+QMu4MyFaXRQ8WWI+Z3Ib+ByNmoNjgz5I0ECwZobWT5V6ii5ADARXc1BcB3ZnpVMtJn97EAZbYV5+Ly9SEyhzMjNYnyF8fCUVJIx0UDQ2LMIfjHwgCMu0MPWbvABhaIf6ZjkXeldLQW4="
 ```
-The data is base64 encoded likely encrypted zlib compressed and md5 or similar hash prepended data 
+The data is base64 encoded likely encrypted zlib compressed and custom hash prepended data 
 
 The actual data looks like : hash+json `'9333ef7396dd56dbb9d6e8f31e8f6014{"TrackList":{"mc":"","tc":"","mu":"","te":"","mp":"","tmv":"","ks":"","fi":"","startTime":1782100652835},"TrackStartTime":1782100652835,"VerifyTime":1782100652862,"arg":"JjObDGdh/ywcWQ=="}'`
 mc = mouse clicks
@@ -2203,9 +2181,9 @@ mu = mouse up?
 etc.
 arg is base64 encoded 10 byte value
 
-## Entire VerifyCaptcha is done by pe.*.*.js file returned in init captcha response
+#### Entire VerifyCaptcha is done by pe.*.*.js file returned in init captcha response
 
-### Major variables and their values
+### Variables and their definitions
 ```javascript
 var ta = ({
             0: te
@@ -2236,10 +2214,9 @@ var ta = ({
 ta
 '__ALIYUN
 to = window.__ALIYUN_CRYPT
-Which contains
 
-window.__ALIYUN_CRYPT
-{lib: {â€¦}, enc: {â€¦}, algo: {â€¦}, MD5: Æ, HmacMD5: Æ, â€¦}
+
+window.__ALIYUN_CRYPT contains
 AES
 : 
 {encrypt: Æ, decrypt: Æ}
@@ -2248,37 +2225,37 @@ DES
 {encrypt: Æ, decrypt: Æ}
 EvpKDF
 : 
-Æ (t,r,e)
+ (t,r,e)
 HmacMD5
 : 
-Æ (r,e)
+ (r,e)
 HmacRIPEMD160
 : 
-Æ (r,e)
+ (r,e)
 HmacSHA1
 : 
-Æ (r,e)
+ (r,e)
 HmacSHA3
 : 
-Æ (r,e)
+ (r,e)
 HmacSHA224
 : 
-Æ (r,e)
+ (r,e)
 HmacSHA256
 : 
-Æ (r,e)
+ (r,e)
 HmacSHA384
 : 
-Æ (r,e)
+ (r,e)
 HmacSHA512
 : 
-Æ (r,e)
+ (r,e)
 MD5
 : 
-Æ (r,e)
+ (r,e)
 PBKDF2
 : 
-Æ (t,r,e)
+ (t,r,e)
 RC4
 : 
 {encrypt: Æ, decrypt: Æ}
@@ -2352,7 +2329,7 @@ tu
 {stringify: Æ, parse: Æ}
 tl
 {stringify: Æ, parse: Æ}
-tf
+tf // Base64 encode decode?
 {_map: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=', _reverseMap: Array(123), stringify: Æ, parse: Æ}
 parse
 : 
@@ -2401,12 +2378,7 @@ Array(4)
 length
 : 
 4
-[[Prototype]]
-: 
-Array(0)
-[[Prototype]]
-: 
-Object
+
 padding
 : 
 pad
@@ -2441,7 +2413,7 @@ VerifyCap
 ### Zlib compression
 Zlib compression is done by function K
 
-hash+json is passed to funtion K ty(t) converts string to uintarray G.deflate zlib compresses the data
+hash+json is passed to funtion K ty(t) converts string to uint8array G.deflate zlib compresses the data
 
 ```javascript
 // Example
@@ -2482,16 +2454,6 @@ name
 prototype
 : 
 {}
-arguments
-: 
-(...)
-caller
-: 
-(...)
-[[FunctionLocation]]
-: 
-ï¿¼pe.059.f123b6c8830e46be.js:1
-[[Prototype]]
 : 
 Æ ()
 [[Scopes]]
@@ -2506,10 +2468,6 @@ gzip
 __esModule
 : 
 true
-[[Prototype]]
-: 
-Object.
-
 
 
 ```
@@ -2571,10 +2529,15 @@ var tU = function(t) {   if ("function" == typeof TextEncoder && TextEncoder.pro
 
 
 
-### Transformation of trackJson is done by fucntion nf
+### Transformation of trackJson is done by fucntion nf as seen in this call C=nx.A(nf,n_)
+```
+nx.A = function(t,n) { return t(n)}
+C = nf(n_) // n_ is trackJson without hash
+```
+
+
 
 ```javascript
-While debugging founded some interesting 🧐 
 
 function nf(t) {
             for (e = 9; e; )
@@ -2667,7 +2630,6 @@ This gets transformed into final data with this code  n = tr[(r && r)(52, 64)](t
 console.log(n);
 JRMlgg0gGwVASQITewRNMEYjU1P7AMM7DGwWaiVYKOEKajqEHFh8RA1neYRfNAdR0XUQfSWw7h2PmQTbVpMbBWVFEHMdI1sENzToeHBDa0gdW0MRcxRcTwxEEp82HSfvd8K7Ri0JKSw7UW8jV31K21N3YXwcwT937U+vWYTVSox0hsdjInZNDW8WB3FzQ0Qkw0sBAAJLKT5CKRN3xwaLCX8bYxoLkQ9oKo5XTDQAZitmn0Qhdc/1Suikdj8OaWwhRjtEPlwSHmc=
 
-
 ### Function nf behaviour 
 console.log(t)
 {TrackList: {â€¦}, TrackStartTime: 1782021569701, VerifyTime: 1782021569717, arg: 'ZjyUTmpv9h8dBw=='}
@@ -2698,7 +2660,7 @@ function tr
 function nf
 function K
 
-## Part 1: Relation
+### Relation
 tr(26, 'test')
 'JRMkWWkGDigveSB2eABaM2cdclsffhBebh0gL0OrLcAuWVtA/UUFYQYbfIx0PgkT1VhpMBetN2vjjcQOioEnDQ=='
 
@@ -2707,14 +2669,14 @@ VM1491 pe.059.f123b6c8830e46be.js:11138 undefined
 'JRMkWWkGDigveSB2eABaM2cdclsffhBebh0gL0OrLcAuWVtA/UUFYQYbfIx0PgkT1VhpMBetN2vjjcQOioEnDQ=='
 
 
-## Most likely Reason 
+### Most likely Reason 
 This code:
 
 n = tr[(r && r)(52, 64)](this, 26)[i.B(r, Math.floor(237), 19)](this, arguments), e = 0
 
 ## My Thoughts: Correct me if im wrong
 
-i guess i.B = function(t, n, e) { return t(n, e) }
+i.B = function(t, n, e) { return t(n, e) }
 and r = function(t, n) { return i.B(te, n, t + 3) }
 //   which simplifies to: r(t, n) = te(n, t + 3)
 
@@ -2752,7 +2714,7 @@ n = tr(26, t)
 
 
 
-## Part 2: Function tr behaviour
+### Function tr behaviour
 
 The first tr call when i trigger verify captcha is:
 
@@ -2762,19 +2724,19 @@ true
 
 The second call is 
 
-console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
+console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o); // decryption?
 VM42148:1 9 'FqJB6iRNVYdEGpwb' '7JLsB18MnA7GX3d6LxErT1sGT68xcVuOAoxz0b7vVzY=' undefined undefined undefined
 'LTAI5tSEBwYMwVKAQGpxmvTd'
 
 Third call is 
 
-console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
+console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o); // decryption again?
 VM42659:1 9 'FqJB6iRNVYdEGpwb' 'n9jH0yACW8YrgOBcM0v7u45+/bfozcSz8ZpvzGBXg3E=' undefined undefined undefined
 'YSKfst7GaVkXwZYvVihJsKF9r89koz'
 
 Fourth call is
 
-console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
+console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o); // xhr?
 VM44730:1 33 rA 𝑓 {$button: button#chat-captcha-trigger, captchaVerifyCallback: undefined, onBizResultCallback: undefined, success:, fail:} {TrackList: {â€¦}, TrackStartTime: 1782100652835, VerifyTime: 1782100652862} undefined undefined undefined
 Promise {<pending>}
 
@@ -2782,35 +2744,31 @@ At this foint r doesnt have arg in it
 
 Fifth call is
 
-console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
+console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o); // device token generation 
 VM47310:1 36 '6iL4denBvY' undefined undefined undefined undefined
 'U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2Q0LWgtMTc4MjA5MzM1NzYyMC0wY2U5YzY2NTU2N2E0N2Q3OTBlNzNkNGE3MTgwNDMwNCNrUHNRYzl2NzB2YXBNdEl6YVVTWWZ4OUFndXBRSzd2RW5QOVpobmgxb1RsODBKWTVpYXFlQkhlWExIR2hDWUlmRHU2WkgrQXNQVk41SHNEWlB5MUNmOWVjVnExb1F6NGtwUkxJQkl1NXRhbVR4d0ZidERuY0ozT2FERTdqdDhtd2dIQ2QrYU5PQ0hlalJlU1A0L0ZoOTFUQzVFbWpCNzZMazQ1UzJvOHNWZmgrTHN0dWcvTW53emtBSUc1L0RBOXc5cGU0NWd1R0RKV21NSHBKTXJ5cm40VGpiTEsvcUxDa1hkcWlIdGkxbUpaRmxUd3N3MkVVcjAybVBxVGIzc3RZVS9INEQwSDVVZHpIUnovZ01jc1BmSnF3WEsyVmVVT2lNTjRYN3RXM3NqcWZadmxNcGtXelpiVnVMRWRLQytuY3ZqbDVZV0NGc0RuRjZrNGpYTkgyT25QdmY0bElIZCtxT25Fb2Ztem5KQ21YZ0JSTnNXK3h0WE90Wng5L0tXeVRWNVpYbHc1dmVHdk11bHhHQTQ0Z1ZZa0FqZExQdDN4ZktXTlFYUFB4K2lUNWdrbTZlRWx4QUV4TlVPanVaUzlHVW83NDcwN1RnbmQ4Y1lGelBxQUxjVDZUWXVoZEVLWEU0aXpoMThsSjR5UDgzSWpCeTFhWER3OVhnRUlLNk5HYzhxTTI1YlVlSVJpSGYwdXpLS0h5NlhGbjlWcmdJUGpUUFI0UmFFRW9XRUg3N0dwdVpkaDE0Yi9YRUQ2b3pUYWh5c3dpZVU2Sk9rZEZPWkRXdEtUbGx6MWMwZjRaWGpxaWIzN3VRRUo5NnJZUG80V2M2MGVXTDZFSVUvVDkraS9lb3J4SE8xTFhPVHoyYWhkYy92bWpIV3RPcWtFWlJXS1NBTFhvNmxuc0tuWjhoZmlxdnY3VGhJaVc0Wm9HZzJVMHJCeWtqajM3SnhBZnNmVXRQRm5oQ0JEWFVTakZhR3lMVjVKVmJjckp0UVdXMlRQRFBia0JrdXhwajI3WlNqV0NBRzBiSTlLRld1MUwzakhaVXEvQjYvYWZ6NmhFd1kyL0ZWczdzMDA0d3lsQnRHYVZtRC9zanlSMFF5STNEMTNtYlQ5d0pORUtpRFNLZ0U5dTVsTytuckswcDlxVUU5RCtVSmUyOUNXUnVWST0jNDQ4I2JiYjRlMmE5MjE5NzFmMDE2Nzk4NjRhZDk4MDEwOTlj'
 
-Sixth call is 
-console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
-VM53514:1 38 
-Y {immediate: true, UserCertifyId: undefined, DeviceConfig: undefined, deviceConfig: undefined, DeviceToken: 'U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2â€¦0OCMwZTI4OTcyMzdlZjcxYmRmMjkzMDA0YjRmNmQ4YTFiNg==', â€¦}
- undefined undefined undefined undefined
-Promise {<fulfilled>: ''}
+Note:
+decoded = SG_WEB#3795d28242a11619bc25f786f84e53d4-h-1782093357620-0ce9c665567a47d790e73d4a71804304#kPsQc9v70vapMtIzaUSYfx9AgupQK7vEnP9Zhnh1oTl80JY5iaqeBHeXLHGhCYIfDu6ZH+AsPVN5HsDZPy1Cf9ecVq1oQz4kpRLIBIu5tamTxwFbtDncJ3OaDE7jt8mwgHCd+aNOCHejReSP4/Fh91TC5EmjB76Lk45S2o8sVfh+Lstug/MnwzkAIG5/DA9w9pe45guGDJWmMHpJMryrn4TjbLK/qLCkXdqiHti1mJZFlTwsw2EUr02mPqTb3stYU/H4D0H5UdzHRz/gMcsPfJqwXK2VeUOiMN4X7tW3sjqfZvlMpkWzZbVuLEdKC+ncvjl5YWCFsDnF6k4jXNH2OnPvf4lIHd+qOnEofmznJCmXgBRNsW+xtXOtZx9/KWyTV5ZXlw5veGvMulxGA44gVYkAjdLPt3xfKWNQXPPx+iT5gkm6eElxAExNUOjuZS9GUo74707Tgnd8cYFzPqALcT6TYuhdEKXE4izh18lJ4yP83IjBy1aXDw9XgEIK6NGc8qM25bUeIRiHf0uzKKHy6XFn9VrgIPjTPR4RaEEoWEH77GpuZdh14b/XED6ozTahyswieU6JOkdFOZDWtKTllz1c0f4ZXjqib37uQEJ96rYPo4Wc60eWL6EIU/T9+i/eorxHO1LXOTz2ahdc/vmjHWtOqkEZRWKSALXo6lnsKnZ8hfiqvv7ThIiW4ZoGg2U0rBykjj37JxAfsfUtPFnhCBDXUSjFaGyLV5JVbcrJtQWW2TPDPbkBkuxpj27ZSjWCAG0bI9KFWu1L3jHZUq/B6/afz6hEwY2/FVs7s004wylBtGaVmD/sjyR0QyI3D13mbT9wJNEKiDSKgE9u5lO+nrK0p9qUE9D+UJe29CWRuVI=#448#bbb4e2a921971f01679864ad9801099c
+this part:kPsQc9v70vapMtIzaUSYfx9AgupQK7vEnP9Zhnh1oTl80JY5iaqeBHeXLHGhCYIfDu6ZH+AsPVN5HsDZPy1Cf9ecVq1oQz4kpRLIBIu5tamTxwFbtDncJ3OaDE7jt8mwgHCd+aNOCHejReSP4/Fh91TC5EmjB76Lk45S2o8sVfh+Lstug/MnwzkAIG5/DA9w9pe45guGDJWmMHpJMryrn4TjbLK/qLCkXdqiHti1mJZFlTwsw2EUr02mPqTb3stYU/H4D0H5UdzHRz/gMcsPfJqwXK2VeUOiMN4X7tW3sjqfZvlMpkWzZbVuLEdKC+ncvjl5YWCFsDnF6k4jXNH2OnPvf4lIHd+qOnEofmznJCmXgBRNsW+xtXOtZx9/KWyTV5ZXlw5veGvMulxGA44gVYkAjdLPt3xfKWNQXPPx+iT5gkm6eElxAExNUOjuZS9GUo74707Tgnd8cYFzPqALcT6TYuhdEKXE4izh18lJ4yP83IjBy1aXDw9XgEIK6NGc8qM25bUeIRiHf0uzKKHy6XFn9VrgIPjTPR4RaEEoWEH77GpuZdh14b/XED6ozTahyswieU6JOkdFOZDWtKTllz1c0f4ZXjqib37uQEJ96rYPo4Wc60eWL6EIU/T9+i/eorxHO1LXOTz2ahdc/vmjHWtOqkEZRWKSALXo6lnsKnZ8hfiqvv7ThIiW4ZoGg2U0rBykjj37JxAfsfUtPFnhCBDXUSjFaGyLV5JVbcrJtQWW2TPDPbkBkuxpj27ZSjWCAG0bI9KFWu1L3jHZUq/B6/afz6hEwY2/FVs7s004wylBtGaVmD/sjyR0QyI3D13mbT9wJNEKiDSKgE9u5lO+nrK0p9qUE9D+UJe29CWRuVI=
+is aes encryted with key 31646664393836656436633062643262 and iv words [808530483,875902519,943276354, 1128547654 ],sigBytes: 16
 
-This triggers a xhr request that isnt important so letsgo to next
-
-Seventh call 
+Sixth call is  
 
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM53596:1 26 {TrackList: {â€¦}, TrackStartTime: 1782100652835, VerifyTime: 1782100652862, arg: 'JjObDGdh/ywcWQ=='} undefined undefined undefined undefined
 'JRMlgg0wDgRASAITRQpNEHEZuJsRBQZDtzsmAXNCL+49eDyEFKlLbSVgFq8aNiIiME9qeyVTKaKkiAQCrb8LIk1vCHMXJG0MOWjmeHE5GGodLkQQXSRFY+BCdntpe1A1ez2zBcgfEfU6c2QvXUxD9xl6TUFapw8G+yeTcaTTe5F3mQlxBGNkcnwbeHhhRzdYKVZ3+jKsH359DR9NImN7DT1alfp/cilvJJwZemkAVjVrnyssVj6RPRt0dV0ejXAUVxYEEnZxQEA='
 
-Eighth call converts into Uint8array 
+Seventh call converts into Uint8array 
 
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM53612:1 30 '9333ef7396dd56dbb9d6e8f31e8f6014{"TrackList":{"mc":"","tc":"","mu":"","te":"","mp":"","tmv":"","ks":"","fi":"","startTime":1782100652835},"TrackStartTime":1782100652835,"VerifyTime":1782100652862,"arg":"JjObDGdh/ywcWQ=="}' undefined undefined undefined undefined
 
-This returns uint8array
+This returns uint8array of string
 
 Uint8Array(221)Â [57, 51, 51, 51, 101, 102, 55, 51, 57, 54, 100, 100, 53, 54, 100, 98, 98, 57, 100, 54, 101, 56, 102, 51, 49, 101, 56, 102, 54, 48, 49, 52, 123, 34, 84, 114, 97, 99, 107, 76, 105, 115, 116, 34, 58, 123, 34, 109, 99, 34, 58, 34, 34, 44, 34, 116, 99, 34, 58, 34, 34, 44, 34, 109, 117, 34, 58, 34, 34, 44, 34, 116, 101, 34, 58, 34, 34, 44, 34, 109, 112, 34, 58, 34, 34, 44, 34, 116, 109, 118, 34, 58, 34, 34, 44, 34, 107, 115, 34, 58,Â â€¦]
 
-Ninth call is 
+Eigth call is 
 
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM54357:1 26 {TrackList: {â€¦}, TrackStartTime: 1782100652835, VerifyTime: 1782100652862, arg: 'JjObDGdh/ywcWQ=='} undefined undefined undefined undefined
@@ -2818,7 +2776,7 @@ VM54357:1 26 {TrackList: {â€¦}, TrackStartTime: 1782100652835, VerifyTime: 1
 
 
 
-10th call is what sends the verifycaptchav3 request
+Ninth call is what sends the verifycaptchav3 request
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM56392:1 22 '{"sceneId":"didk33e0","certifyId":"6iL4denBvY","deviceToken":"U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2Q0LWgtMTc4MjA5MzM1NzYyMC0wY2U5YzY2NTU2N2E0N2Q3OTBlNzNkNGE3MTgwNDMwNCNrUHNRYzl2NzB2YXBNdEl6YVVTWWZ4OUFndXBRSzd2RW5QOVpobmgxb1RsODBKWTVpYXFlQkhlWExIR2hDWUlmRHU2WkgrQXNQVk41SHNEWlB5MUNmOWVjVnExb1F6NGtwUkxJQkl1NXRhbVR4d0ZidERuY0ozT2FERTdqdDhtd2dIQ2QrYU5PQ0hlalJlU1A0L0ZoOTFUQzVFbWpCNzZMazQ1UzJvOHNWZmgrTHN0dWcvTW53emtBSUc1L0RBOXc5cGU0NWd1R0RKV21NSHBKTXJ5cm40VGpiTEsvcUxDa1hkcWlIdGkxbUpaRmxUd3N3MkVVcjAybVBxVGIzc3RZVS9INEQwSDVVZHpIUnovZ01jc1BmSnF3WEsyVmVVT2lNTjRYN3RXM3Nqb0wvdW4xWHpGSFh4OE5yQ1d3b093cVVJMkVPVmdKeCtBNTYvR3FETlQyTGU4WFdudFdPcDcxYjhvY0ZTQkhJNytlVUljaGJRendXN2lmcnBkNnU1WTArdEZacjYvQ1J3ajRsWUlTUkJ1WFg0VTdueTFYOGkyd3JESXdMWDZKZkQ0SHZha1c1dFdEM09QOUpTczNVelFTMjJwSXZjYkY4cHF3WHdxdFgwU3MzNC9Qa0hvRDBxL3NacFZsWDEzL1hBYTcvZ1VWUUVXRWxyTXVpZis3TS9jaEdLV0NqUXF6dnZ6WEFCaDJFY3padk5PNG9lLy8yN2lTQTk5SG5BZDRWWDlmczBOV1czUUxxd1lsR2N6R2o2NmxXVk0wYWxzbHl2YWFXMjBHcE9XVzBkdGFUVXpJZVZvVUZTUHlEZWkyTHNJaWtuS0VlWEJvM3RJOGJRdDcrSklTRHdwVlZhRVdEU1FXbFBJMXdEeG5pOUtqY3prNWZHcEgvUlpNNmlnUFU3VkZtL2xrdmFDL2lQWXVPMC9jNThnYk5JTnVqUWRvS1dZWjk3NE04WlhjOHdUYXJLb0R6MUVPSCs3L0h1VWlkRVVHQ2M3b3VXYXY4ajMvL2ZqWGdDZmFiQ01meEJFcWRoaExEZ1NXL3ozVENxQ1VNQ2pQdTNFdVRpNjRqcjBSeUJPaGl2THVSNnk5U0YydmltamdVVHovM3A2M3NzV0VSTFF4My81aEg1T1hNeENHSG5GL3p0dmdNSjRTUmNJZmlyST0jNDQ4Izg1YjgxN2M2YmM4NzNjNTlkZDQ2OWRiMzhmNTk5YjA0","data":"JRMlgg0wDgRASAITRQpNEHEZuJsRBQZDtzsmAXNCL+49eDyEFKlLbSVgFq8aNiIiME9qeyVTKaKkiAQCrb8LIk1vCHMXJG0MOWjmeHE5GGodLkQQXSRFY+BCdntpe1A1ez2zBcgfEfU6c2QvXUxD9xl6TUFapw8G+yeTcaTTe5F3mQlxBGNkcnwbeHhhRzdYKVZ3+jKsH359DR9NImN7DT1alfp/cilvJJwZemkAVjVrnyssVj6RPRt0dV0ejXAUVxYEEnZxQEA="}' YÂ {immediate: true, UserCertifyId: undefined, DeviceConfig: undefined, deviceConfig: undefined, DeviceToken: 'U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2â€¦0OCMwZTI4OTcyMzdlZjcxYmRmMjkzMDA0YjRmNmQ4YTFiNg==',Â â€¦} undefined undefined undefined
 PromiseÂ {<pending>}
@@ -2835,9 +2793,7 @@ tr(11) also generates signature
 tr(14,e) url encodes e
 
 
-### Function K is called by this code with trackjson( hash included)
-
-
+### ZLib compression of trackjson; Function K is called by this code with trackjson( hash included)
 
 Correct me if im wrong
 Subject:
@@ -2908,6 +2864,9 @@ function ti(t, n) {
 
 ```
 
+### NOTE:
+When using function ti or wrapper of ti first use a valid xor key only then use single arguments 
+
 #### Test and proofs
 td(10,78)
 '4c63f913'
@@ -2952,16 +2911,10 @@ console.log(nj)
     "3e627e1b4c63f913"
 ]
 ```bash
-~ $ echo eJx1jcEKwjAQRP9lzzm4aWLSQg+9iIgg2CJe05KWUCKaREVK/91AchI8vX3MsEO5LnuumGC8ZIgo+bBhapS66OUWBVugc2qYj8YHqBawA1QABEKmfWbX2e/Z7Ssds08cTaIPyoXO2NhHIWlcLLhEKVaShto/OYGLdmb8/EYUKQHlpvj9cH60++u72TXN7TTVNaxfJOs7Cg== | base64 -d | xxd
+~ $ echo eJx1jcEKwjAQRP9lzzm4aWLSQg+9iIgg2CJe05KWUCKaREVK/91AchI8vX3MsEO5LnuumGC8ZIgo+bBhapS66OUWBVugc2qYj8YHqBawA1QABEKmfWbX2e/Z7Ssds08cTaIPyoXO2NhHIWlcLLhEKVaShto/OYGLdmb8/EYUKQHlpvj9cH60++u72TXN7TTVNaxfJOs7Cg== | base64 -d | xxd | head -1
 00000000: 789c 758d c10a c230 1044 ff65 cf39 b869  x.u....0.D.e.9.i
-00000010: 62d2 420f bd88 8820 d822 5ed3 9296 5022  b.B.... ."^...P"                                                                                                       00000020: 9a44 454a ffdd 4072 123c bd7d ccb0 43b9  .DEJ..@r.<.}..C.
-00000030: 2e7b ae98 60bc 6488 28f9 b061 6a94 bae8  .{..`.d.(..aj...                                                                                                       00000040: e516 055b a073 6a98 8fc6 07a8 16b0 0354  ...[.sj........T
-00000050: 0004 42a6 7d66 d7d9 efd9 ed2b 1db3 4f1c  ..B.}f.....+..O.
-00000060: 4da2 0fca 85ce d8d8 4721 695c 2cb8 4429  M.......G!i\,.D)
-00000070: 5692 86da 3f39 818b 7666 fcfc 4614 2901  V...?9..vf..F.).
-00000080: e5a6 f8fd 707e b4fb ebbb d935 cded 34d5  ....p~.....5..4.
-00000090: 35ac 5f24 eb3b 0a                        5._$.;.
-~ $
+
+Success: Valid zlib headers 
 ```
 
 ```python
@@ -2976,9 +2929,8 @@ to/OYGLdmb8/EYUKQHlpvj9cH60++u72TXN7TTVNaxfJOs7Cg=="                            
 
 
 
-Is this md5 calculation  or custom hash by VM? idk
+This is hash calculation call
 er = P(0, [], F, V, ez, [er, (td && td)(77, 19)]) + er
-
 
 ```javascript
 // Function P
@@ -3176,315 +3128,17 @@ var P = function t(n, e, r, i, a, o) {
 ```
 ### value of ez
 ```json
-{
-    "r": 1
-}
+{"r": 1}
 ```
 ### Value of td(77,19)
 '0000'
 
 ### Value of V
 ```json
-[
-    "o",
-    "r",
-    "a",
-    "m",
-    "C",
-    "e",
-    "f",
-    "i",
-    "p",
-    "h",
-    "d",
-    "",
-    0,
-    147,
-    "n",
-    "fromCharCode",
-    252,
-    241,
-    249,
-    246,
-    240,
-    231,
-    "map",
-    "join",
-    202,
-    172,
-    191,
-    164,
-    169,
-    190,
-    163,
-    165,
-    87,
-    56,
-    53,
-    61,
-    50,
-    52,
-    35,
-    156,
-    250,
-    233,
-    242,
-    255,
-    232,
-    245,
-    243,
-    108,
-    24,
-    3,
-    63,
-    30,
-    5,
-    2,
-    11,
-    206,
-    167,
-    160,
-    170,
-    171,
-    182,
-    129,
-    168,
-    124,
-    12,
-    14,
-    19,
-    8,
-    25,
-    33,
-    84,
-    79,
-    69,
-    68,
-    71,
-    72,
-    "_",
-    55,
-    64,
-    94,
-    89,
-    83,
-    88,
-    1,
-    22,
-    97,
-    127,
-    120,
-    114,
-    121,
-    46,
-    117,
-    65,
-    76,
-    75,
-    77,
-    90,
-    74,
-    115,
-    54,
-    95,
-    82,
-    110,
-    29,
-    36,
-    166,
-    152,
-    159,
-    149,
-    158,
-    134,
-    78,
-    66,
-    85,
-    119,
-    20,
-    26,
-    18,
-    44,
-    67,
-    70,
-    73,
-    104,
-    113,
-    162,
-    205,
-    192,
-    200,
-    199,
-    193,
-    214,
-    130,
-    234,
-    239,
-    238,
-    230,
-    215,
-    207,
-    204,
-    151,
-    211,
-    248,
-    244,
-    226,
-    227,
-    181,
-    146,
-    132,
-    148,
-    133,
-    91,
-    93,
-    86,
-    201,
-    253,
-    247,
-    178,
-    221,
-    150,
-    153,
-    136,
-    220,
-    184,
-    137,
-    145,
-    161,
-    157,
-    131,
-    179,
-    154,
-    142,
-    135,
-    28,
-    125,
-    106,
-    123,
-    155,
-    128,
-    32,
-    45,
-    37,
-    42,
-    59,
-    111,
-    57,
-    38,
-    40,
-    216,
-    185,
-    174,
-    177,
-    183,
-    141,
-    195,
-    236,
-    251,
-    228,
-    212,
-    210,
-    218,
-    173,
-    188,
-    138,
-    139,
-    143,
-    144,
-    175,
-    187,
-    180,
-    4,
-    7,
-    34,
-    194,
-    223,
-    229,
-    15,
-    49,
-    58,
-    96,
-    10,
-    101,
-    16,
-    41,
-    107,
-    48,
-    9,
-    31,
-    27,
-    21,
-    6,
-    109,
-    140,
-    224,
-    225,
-    118,
-    122,
-    196,
-    197,
-    203,
-    186,
-    189,
-    176,
-    13,
-    17,
-    43,
-    99,
-    23,
-    47,
-    103,
-    112,
-    237,
-    80,
-    105,
-    102,
-    98,
-    213,
-    126,
-    81,
-    100,
-    92,
-    116,
-    51,
-    62,
-    219,
-    209,
-    254,
-    208,
-    39,
-    222,
-    198,
-    217,
-    235,
-    false,
-    60,
-    "Boolean",
-    "Number",
-    "String",
-    "j",
-    "t",
-    "u",
-    "arguments",
-    "s",
-    "random",
-    256,
-    "floor",
-    "push",
-    "length",
-    "0",
-    "toString",
-    "y",
-    "charCodeAt"
-]
+[    "o",    "r",    "a",    "m",    "C",    "e",    "f",    "i",    "p",    "h",    "d",    "",    0,    147,    "n",    "fromCharCode",    252,    241,    249,    246,    240,    231,    "map",    "join",    202,    172,    191,    164,    169,    190,    163,    165,    87,    56,    53,    61,    50,    52,    35,    156,    250,    233,    242,    255,    232,    245,    243,    108,    24,    3,    63,    30,    5,    2,    11,    206,    167,    160,    170,    171,    182,    129,    168,    124,    12,    14,    19,    8,    25,    33,    84,    79,    69,    68,    71,    72,    "_",    55,    64,    94,    89,    83,    88,    1,    22,    97,    127,    120,    114,    121,    46,    117,    65,    76,    75,    77,    90,    74,    115,    54,    95,    82,    110,    29,    36,    166,    152,    159,    149,    158,    134,    78,    66,    85,    119,    20,    26,    18,    44,    67,    70,    73,    104,    113,    162,    205,    192,    200,    199,    193,    214,    130,    234,    239,    238,    230,    215,    207,    204,    151,    211,    248,    244,    226,    227,    181,    146,    132,    148,    133,    91,    93,    86,    201,    253,    247,    178,    221,    150,    153,    136,    220,    184,    137,    145,    161,    157,    131,    179,    154,    142,    135,    28,    125,    106,    123,    155,    128,    32,    45,    37,    42,    59,    111,    57,    38,    40,    216,    185,    174,    177,    183,    141,    195,    236,    251,    228,    212,    210,    218,    173,    188,    138,    139,    143,    144,    175,    187,    180,    4,    7,    34,    194,    223,    229,    15,    49,    58,    96,    10,    101,    16,    41,    107,    48,    9,    31,    27,    21,    6,    109,    140,    224,    225,    118,    122,    196,    197,    203,    186,    189,    176,    13,    17,    43,    99,    23,    47,    103,    112,    237,    80,    105,    102,    98,    213,    126,    81,    100,    92,    116,    51,    62,    219,    209,    254,    208,    39,    222,    198,    217,    235,    false,    60,    "Boolean",    "Number",    "String",    "j",    "t",    "u",    "arguments",    "s",    "random",    256,    "floor",    "push",    "length",    "0",    "toString",    "y",    "charCodeAt"]
 ```
-even when __ALIYUN_CRYPT was not defined in the scope it caculated exact md5
-
-Also found salt mystery that vm likely uses some kind of special parsing salt  which returns 0 so when i tested salt = 00 , 000 , 0000000 all worked but using 0010 doesnt but using 0000000000001 works
+### Salt mystery:
+VM likely uses somespecial parse salt which returns 0 so when i tested salt = 00 , 000 , 0000000 all worked but using 0010 or 00123 etc doesnt works while using 0000000000001 works
 P(0, [], F, V,ez, [input,'0000000000000000000001'])
 '9333ef7396dd56dbb9d6e8f31e8f6014'
-
-
-
-# Note whn using function ti first  use a valid xor key only then use single arguments 
+Is this because of salt lenght check? 
