@@ -2778,6 +2778,8 @@ console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM44730:1 33 rA 𝑓 {$button: button#chat-captcha-trigger, captchaVerifyCallback: undefined, onBizResultCallback: undefined, success:, fail:} {TrackList: {â€¦}, TrackStartTime: 1782100652835, VerifyTime: 1782100652862} undefined undefined undefined
 Promise {<pending>}
 
+At this foint r doesnt have arg in it
+
 Fifth call is
 
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
