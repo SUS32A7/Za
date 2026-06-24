@@ -3170,4 +3170,1550 @@ full disassembly of Virtual Machine using which we can reconstruct it in javascr
 1. Disassebmle Virtual Machine with appropriate bytecode and other arguments: `disasm.py`
 2. Finding xor encoded function/strings using `analyze.py`
 3. Decoding all the XOR-encoded strings that get assigned to variable names using `decode_strings.py`
-4. 
+4. Extracting all encoded strings by finding BUILD_ARRAY + map(fn) + join patterns using `full_decode.py`
+5. Extracting all the encoded byte arrays and decode them to strings using `extract_strings.py`
+6. Analysing critical parts disassembly that does hashing using bash commands like `grep -n "" disasm.txt | tail -300 | head -200`, `tail -100 disasm.txt`.`grep -n "" disasm.txt | grep -E "^(7[6-9][0-9]{2}|8[0-2][0-9]{2}):" | head -100`. `grep -n "" disasm.txt | grep -E "^(7[4-6][0-9]{2}):" | head -100` etc.
+7. Decoding the strings around pc 15396 and 15464 that appear to be key strings in the algorithm using:
+```bash
+python3 << 'PYEOF'
+V = [
+    "o","r","a","m","C","e","f","i","p","h","d","",0,147,"n","fromCharCode",
+    252,241,249,246,240,231,"map","join",202,172,191,164,169,190,163,165,
+    87,56,53,61,50,52,35,156,250,233,242,255,232,245,243,108,24,3,63,30,
+    5,2,11,206,167,160,170,171,182,129,168,124,12,14,19,8,25,33,84,79,69,
+    68,71,72,"_",55,64,94,89,83,88,1,22,97,127,120,114,121,46,117,65,76,
+    75,77,90,74,115,54,95,82,110,29,36,166,152,159,149,158,134,78,66,85,
+    119,20,26,18,44,67,70,73,104,113,162,205,192,200,199,193,214,130,234,
+    239,238,230,215,207,204,151,211,248,244,226,227,181,146,132,148,133,
+    91,93,86,201,253,247,178,221,150,153,136,220,184,137,145,161,157,131,
+    179,154,142,135,28,125,106,123,155,128,32,45,37,42,59,111,57,38,40,
+    216,185,174,177,183,141,195,236,251,228,212,210,218,173,188,138,139,
+    143,144,175,187,180,4,7,34,194,223,229,15,49,58,96,10,101,16,41,107,
+    48,9,31,27,21,6,109,140,224,225,118,122,196,197,203,186,189,176,13,17,
+    43,99,23,47,103,112,237,80,105,102,98,213,126,81,100,92,116,51,62,219,
+    209,254,208,39,222,198,217,235,False,60,"Boolean","Number","String",
+    "j","t","u","arguments","s","random",256,"floor","push","length","0",
+    "toString","y","charCodeAt"
+]
+
+# String at pc=15396, XOR key=75 (V[94]=75)
+# nums: V[241]=176, V[105]=166, V[240]=189, V[168]=179
+nums = [V[241], V[105], V[240], V[168]]
+key = 75
+s = ''.join(chr(n ^ key) for n in nums)
+print(f"String at pc=15396 (xor=75): {repr(s)}")
+
+# String at pc=15464, XOR key=75 but let's check the fn at 15440
+# fn at 15440 has PUSH_CONST V[94]=75
+nums2 = [V[90], V[180], V[186], V[104], V[247], V[90], V[51], V[68], 
+         V[53], V[67], V[104], V[185], V[182], V[104], V[180], V[90], V[180], V[50]]
+key2 = 75  # XOR key from fn at 15440
+s2 = ''.join(chr(int(n) ^ key2) for n in nums2)
+print(f"String at pc=15464 (xor=75): {repr(s2)}")
+
+# String at 15560, fn at 15536 has PUSH_CONST V[222]=41
+nums3 = [V[95], V[93], V[97], V[120], V[95], V[93], V[63], V[175], 
+         V[218], V[174], V[120], V[73], V[80], V[120], V[74], V[93], V[74], V[151]]
+key3 = 41
+s3 = ''.join(chr(int(n) ^ key3) for n in nums3)
+print(f"String at pc=15560 (xor=41): {repr(s3)}")
+
+# What's V[289]? -> 'y'  
+print(f"\nV[281]={repr(V[281])}")  # 's'
+print(f"V[282]={repr(V[282])}")  # 'random'
+print(f"V[283]={repr(V[283])}")  # 256
+print(f"V[284]={repr(V[284])}")  # 'floor'
+print(f"V[285]={repr(V[285])}")  # 'push'
+print(f"V[286]={repr(V[286])}")  # 'length'
+print(f"V[287]={repr(V[287])}")  # '0'
+print(f"V[288]={repr(V[288])}")  # 'toString'
+print(f"V[289]={repr(V[289])}")  # 'y'
+print(f"V[290]={repr(V[290])}")  # 'charCodeAt'
+
+PYEOF
+
+
+Output
+
+String at pc=15396 (xor=75): 'ûíöø'
+String at pc=15464 (xor=75): 'encodeURIComponent'
+String at pc=15560 (xor=41): 'decodeURIComponent'
+
+V[281]='s'
+V[282]='random'
+V[283]=256
+V[284]='floor'
+V[285]='push'
+V[286]='length'
+V[287]='0'
+V[288]='toString'
+V[289]='y'
+V[290]='charCodeAt'
+```
+8. Looking at the section around PC 15760-15870 to understand the main hash structure using `grep -n "" disasm.txt | sed -n '7550,7650p'`
+9. Decoding the remaining key strings - especially at 15728 and find what 'h' and 'd' and 'u' are using
+```bash
+python3 << 'PYEOF'
+V = [
+    "o","r","a","m","C","e","f","i","p","h","d","",0,147,"n","fromCharCode",
+    252,241,249,246,240,231,"map","join",202,172,191,164,169,190,163,165,
+    87,56,53,61,50,52,35,156,250,233,242,255,232,245,243,108,24,3,63,30,
+    5,2,11,206,167,160,170,171,182,129,168,124,12,14,19,8,25,33,84,79,69,
+    68,71,72,"_",55,64,94,89,83,88,1,22,97,127,120,114,121,46,117,65,76,
+    75,77,90,74,115,54,95,82,110,29,36,166,152,159,149,158,134,78,66,85,
+    119,20,26,18,44,67,70,73,104,113,162,205,192,200,199,193,214,130,234,
+    239,238,230,215,207,204,151,211,248,244,226,227,181,146,132,148,133,
+    91,93,86,201,253,247,178,221,150,153,136,220,184,137,145,161,157,131,
+    179,154,142,135,28,125,106,123,155,128,32,45,37,42,59,111,57,38,40,
+    216,185,174,177,183,141,195,236,251,228,212,210,218,173,188,138,139,
+    143,144,175,187,180,4,7,34,194,223,229,15,49,58,96,10,101,16,41,107,
+    48,9,31,27,21,6,109,140,224,225,118,122,196,197,203,186,189,176,13,17,
+    43,99,23,47,103,112,237,80,105,102,98,213,126,81,100,92,116,51,62,219,
+    209,254,208,39,222,198,217,235,False,60,"Boolean","Number","String",
+    "j","t","u","arguments","s","random",256,"floor","push","length","0",
+    "toString","y","charCodeAt"
+]
+
+# String at 15728 with xor key = V[151] = 93
+# nums: V[186]=40, V[261]=51, V[33]=56, V[90]=46, V[262]=62, V[273]=60, V[179]=45, V[33]=56
+nums = [V[186], V[261], V[33], V[90], V[262], V[273], V[179], V[33]]
+key = V[151]  # = 93
+print(f"V[151] = {key}")
+s = ''.join(chr(int(n) ^ int(key)) for n in nums)
+print(f"String at 15728 (xor=93) -> 'u' = {repr(s)}")
+
+# What's at string decoded earlier as h?
+# At pc=15396: nums=[V[241]=176, V[105]=166, V[240]=189, V[168]=179] xor=75
+# 176^75=235(?), let me recompute
+nums_h = [V[241], V[105], V[240], V[168]]
+key_h = 75
+s_h = ''.join(chr(int(n) ^ key_h) for n in nums_h)
+print(f"String for 'h' = {repr(s_h)}")
+
+# Let me trace back further to find what 'C' function is, what 'h' value comes from
+# The string result gets accessed as window[str] (._ = window)
+# e['atob'] -> the fn arg[0] which is the JSON input? 
+# No wait...
+
+# Let me look at the variables more carefully
+# V[279]='u', V[280]='arguments', V[281]='s'
+
+# Argument 0 = o = the JSON input string  
+# Argument 1 = r = td = '0000'
+
+# 'o' = input string (JSON)
+# 'r' = td = '0000'
+# 'a' = [] (empty array, will be filled with 16 random bytes = AES key candidate?)
+# 'C' = some function called on the scope (c.C())
+# 'm' = result of C()
+# 'f' = length of something (a lookup table size?)
+
+# Let me find what 'f', 'i', 'e', 'p' are set to before the final section
+# Looking at what builds them...
+
+# From the disassembly list [6]-[7]:
+# e = 'prototype'
+# f = 'undefined'
+# i = 'p'  (V[8]='p')
+# p = 'h'  (V[9]='h')
+
+# But these get overwritten. Let me look at the critical section more carefully
+# From the extracted strings:
+# [171] = 'Math'
+# [172] = 'atob'  (V[336]=4 -> wait that doesn't match)
+
+# Let me check string #171 - 'Math'
+# pc=15268, xor=95, nums=[...] -> 'Math'
+# Then it's accessed as window['Math'] 
+
+# For 'atob': pc=15336, xor=6, -> 'atob'
+
+# So the function accesses window.Math and window.atob etc.
+# The 'C' function is some transformation
+# Let me look at what h is - appears to be parseInt  based on the 'atob' access pattern
+
+# Actually let me check what's at h - it comes from:
+# PUSH_SCOPE V[76]='_'  -> window
+# [XORED STRING] GET_PROP -> window[decoded_string]
+# h = result
+
+# At string [133]: pc=12204, decoded='p' -> but that's innerText looking at the assignment
+
+# Let me check V[279]='u' and see what u gets set to
+# From disasm line 7585-7586: v[279]='u' SET_PROP -> c.u = result of get_prop(window, XORED_STR)
+# And the xored string at 15728 with xor=93 -> let me recalculate
+
+print("\nRechecking special variable assignments:")
+
+# 'h' at pc 15396: get_prop from window
+nums_h2 = [V[241], V[105], V[240], V[168]]
+# fn at ~15370 uses xor key V[94]=75 (from the pattern before)
+# But wait - at 15396 we do: BUILD_ARRAY + map(fn) + join + GET_PROP + SET_PROP h
+# The fn was the one at entry 15375 with xor=75
+key_h2 = 75
+s_h2 = ''.join(chr(int(n) ^ key_h2) for n in nums_h2)
+print(f"h = window[{repr(s_h2)}]")  # parseInt!
+
+# 'd' at pc 15500: window[decodeURIComponent_string] (already decoded as 'decodeURIComponent')
+# But wait - the access is _.d = window['encodeURIComponent']? 
+# No - let me re-read:
+# c._ = window, then GET_PROP gives window['encodeURIComponent']
+# That gets stored in 'd'
+print(f"d = window['encodeURIComponent'] (the fn)")
+
+# 'j' at pc 15560: window['decodeURIComponent']
+print(f"j = window['decodeURIComponent'] (the fn)")
+
+# 'u' at pc 15728 - string decoded above  
+print(f"u = window[{repr(s)}]")  # let me check
+
+# Looking at the scope: c._ = window
+# So _.u means window.u? No, 'u' is a JS VM variable name (V[278]='u')
+# The value of u = result of window['encodeURIComponent'](something)?
+# No - at 15764: c.u = window['_'][decoded_string_at_15728]
+# c._ = window so window[string]
+
+s_u = ''.join(chr(int(n) ^ 93) for n in nums)
+print(f"u = window[{repr(s_u)}]")
+
+PYEOF
+Output
+
+V[151] = 93
+String at 15728 (xor=93) -> 'u' = 'unescape'
+String for 'h' = 'ûíöø'
+
+Rechecking special variable assignments:
+h = window['ûíöø']
+d = window['encodeURIComponent'] (the fn)
+j = window['decodeURIComponent'] (the fn)
+u = window['unescape']
+u = window['unescape']
+```
+
+10. Tracing back what h string should decode to - re-examine the XOR function used for h using:
+```bash
+
+python3 << 'PYEOF'
+import json
+
+with open('F_bytecode.txt') as f:
+    F = json.load(f)
+
+V = [
+    "o","r","a","m","C","e","f","i","p","h","d","",0,147,"n","fromCharCode",
+    252,241,249,246,240,231,"map","join",202,172,191,164,169,190,163,165,
+    87,56,53,61,50,52,35,156,250,233,242,255,232,245,243,108,24,3,63,30,
+    5,2,11,206,167,160,170,171,182,129,168,124,12,14,19,8,25,33,84,79,69,
+    68,71,72,"_",55,64,94,89,83,88,1,22,97,127,120,114,121,46,117,65,76,
+    75,77,90,74,115,54,95,82,110,29,36,166,152,159,149,158,134,78,66,85,
+    119,20,26,18,44,67,70,73,104,113,162,205,192,200,199,193,214,130,234,
+    239,238,230,215,207,204,151,211,248,244,226,227,181,146,132,148,133,
+    91,93,86,201,253,247,178,221,150,153,136,220,184,137,145,161,157,131,
+    179,154,142,135,28,125,106,123,155,128,32,45,37,42,59,111,57,38,40,
+    216,185,174,177,183,141,195,236,251,228,212,210,218,173,188,138,139,
+    143,144,175,187,180,4,7,34,194,223,229,15,49,58,96,10,101,16,41,107,
+    48,9,31,27,21,6,109,140,224,225,118,122,196,197,203,186,189,176,13,17,
+    43,99,23,47,103,112,237,80,105,102,98,213,126,81,100,92,116,51,62,219,
+    209,254,208,39,222,198,217,235,False,60,"Boolean","Number","String",
+    "j","t","u","arguments","s","random",256,"floor","push","length","0",
+    "toString","y","charCodeAt"
+]
+
+# Let me find the exact bytes around pc 15380-15422
+# Looking for the MAKE_FUNC and BUILD_ARRAY leading to h
+r = F
+
+# Scan around index 15380 in F (note F indices = bytecode positions, but we need array indices)
+# The disasm showed pc=15396 as BUILD_ARRAY count=4 (push)
+# That means F[15396] = 55, F[15397] = 4, F[15398] = 1
+
+# Let me verify
+print(f"F[15396] = {F[15396]} (expect 55=BUILD_ARRAY)")
+print(f"F[15397] = {F[15397]} (expect 4=count)")
+
+# The MAKE_FUNC for the mapper function of h - find it
+# Scanning for the MAKE_FUNC before F[15396]
+# Looking backwards from 15396 for a MAKE_FUNC (7)
+search_range = range(15380, 15400)
+for i in search_range:
+    print(f"F[{i}] = {F[i]}")
+
+print("...")
+# The string bytes for h:
+print(f"\nNums: V[241]={V[241]}, V[105]={V[105]}, V[240]={V[240]}, V[168]={V[168]}")
+
+# Now find the MAKE_FUNC before this - go back
+# The structure is: PUSH_CONST '' (43,11) PUSH_CONST 0 (43,12) MAKE_FUNC (7) entry push
+# Then jump to after the function body
+# Let's find MAKE_FUNC between 15370 and 15395
+for i in range(15365, 15396):
+    if F[i] == 7:
+        print(f"MAKE_FUNC at F[{i}], entry={F[i+1]}, push={F[i+2]}")
+        entry = F[i+1]
+        # Check entry
+        print(f"  Entry bytecode F[{entry}]={F[entry]}, F[{entry+1}]={F[entry+1]}")
+        if F[entry] == 43 and F[entry+1] == 0:  # PUSH_CONST 'o'
+            n = entry + 2
+            if F[n] == 49:  # BIND_ARGS
+                nargs = F[n+1]
+                n += 2
+                if F[n] == 33 and F[n+1] == 0:  # LOAD_VAR 'o'
+                    n += 3
+                    if F[n] == 43:  # PUSH_CONST KEY
+                        key_idx = F[n+1]
+                        print(f"  XOR key = V[{key_idx}] = {V[key_idx]}")
+
+PYEOF
+Output
+
+F[15396] = 43 (expect 55=BUILD_ARRAY)
+F[15397] = 241 (expect 4=count)
+F[15380] = 198
+F[15381] = 23
+F[15382] = 1
+F[15383] = 30
+F[15384] = 43
+F[15385] = 14
+F[15386] = 56
+F[15387] = 1
+F[15388] = 43
+F[15389] = 15
+F[15390] = 50
+F[15391] = 1
+F[15392] = 1
+F[15393] = 25
+F[15394] = 2
+F[15395] = 11
+F[15396] = 43
+F[15397] = 241
+F[15398] = 43
+F[15399] = 105
+...
+
+Nums: V[241]=176, V[105]=166, V[240]=189, V[168]=179
+MAKE_FUNC at F[15367], entry=15372, push=1
+  Entry bytecode F[15372]=43, F[15373]=0
+  XOR key = V[198] = 210
+```
+
+11. Recalculate h string with correct XOR key 210 using:
+```bash
+python3 << 'PYEOF'
+import json
+
+with open('F_bytecode.txt') as f:
+    F = json.load(f)
+
+V = [
+    "o","r","a","m","C","e","f","i","p","h","d","",0,147,"n","fromCharCode",
+    252,241,249,246,240,231,"map","join",202,172,191,164,169,190,163,165,
+    87,56,53,61,50,52,35,156,250,233,242,255,232,245,243,108,24,3,63,30,
+    5,2,11,206,167,160,170,171,182,129,168,124,12,14,19,8,25,33,84,79,69,
+    68,71,72,"_",55,64,94,89,83,88,1,22,97,127,120,114,121,46,117,65,76,
+    75,77,90,74,115,54,95,82,110,29,36,166,152,159,149,158,134,78,221,
+    150,153,136,220,184,137,145,161,157,131,
+    179,154,142,135,28,125,106,123,155,128,32,45,37,42,59,111,57,38,40,
+    216,185,174,177,183,141,195,236,251,228,212,210,218,173,188,138,139,
+    143,144,175,187,180,4,7,34,194,223,229,15,49,58,96,10,101,16,41,107,
+    48,9,31,27,21,6,109,140,224,225,118,122,196,197,203,186,189,176,13,17,
+    43,99,23,47,103,112,237,80,105,102,98,213,126,81,100,92,116,51,62,219,
+    209,254,208,39,222,198,217,235,False,60,"Boolean","Number","String",
+    "j","t","u","arguments","s","random",256,"floor","push","length","0",
+    "toString","y","charCodeAt"
+]
+
+# The BUILD_ARRAY for 'h' is at pc 15404 (F index 15404)
+# F[15404]=55 = BUILD_ARRAY? Let me verify
+print(f"F[15404] = {F[15404]}")
+print(f"F[15405] = {F[15405]}")  # count
+
+# Find exact positions
+for i in range(15396, 15430):
+    print(f"F[{i}] = {F[i]}")
+
+PYEOF
+Output
+
+F[15404] = 55
+F[15405] = 4
+F[15396] = 43
+F[15397] = 241
+F[15398] = 43
+F[15399] = 105
+F[15400] = 43
+F[15401] = 240
+F[15402] = 43
+F[15403] = 168
+F[15404] = 55
+F[15405] = 4
+F[15406] = 1
+F[15407] = 43
+F[15408] = 22
+F[15409] = 50
+F[15410] = 1
+F[15411] = 1
+F[15412] = 43
+F[15413] = 23
+F[15414] = 50
+F[15415] = 1
+F[15416] = 1
+F[15417] = 56
+F[15418] = 1
+F[15419] = 30
+F[15420] = 43
+F[15421] = 9
+F[15422] = 27
+F[15423] = 0
+F[15424] = 21
+F[15425] = 10
+F[15426] = 30
+F[15427] = 43
+F[15428] = 76
+F[15429] = 56
+```
+
+12. Tracing the actual hash algorithm - look at what happens with 'e', 'f', 'C' which are the core of the hash using:
+```bash
+python3 << 'PYEOF'
+import json
+
+with open('F_bytecode.txt') as f:
+    F = json.load(f)
+
+V = [
+    "o","r","a","m","C","e","f","i","p","h","d","",0,147,"n","fromCharCode",
+    252,241,249,246,240,231,"map","join",202,172,191,164,169,190,163,165,
+    87,56,53,61,50,52,35,156,250,233,242,255,232,245,243,108,24,3,63,30,
+    5,2,11,206,167,160,170,171,182,129,168,124,12,14,19,8,25,33,84,79,69,
+    68,71,72,"_",55,64,94,89,83,88,1,22,97,127,120,114,121,46,117,65,76,
+    75,77,90,74,115,54,95,82,110,29,36,166,152,159,149,158,134,78,66,85,
+    119,20,26,18,44,67,70,73,104,113,162,205,192,200,199,193,214,130,234,
+    239,238,230,215,207,204,151,211,248,244,226,227,181,146,132,148,133,
+    91,93,86,201,253,247,178,221,150,153,136,220,184,137,145,161,157,131,
+    179,154,142,135,28,125,106,123,155,128,32,45,37,42,59,111,57,38,40,
+    216,185,174,177,183,141,195,236,251,228,212,210,218,173,188,138,139,
+    143,144,175,187,180,4,7,34,194,223,229,15,49,58,96,10,101,16,41,107,
+    48,9,31,27,21,6,109,140,224,225,118,122,196,197,203,186,189,176,13,17,
+    43,99,23,47,103,112,237,80,105,102,98,213,126,81,100,92,116,51,62,219,
+    209,254,208,39,222,198,217,235,False,60,"Boolean","Number","String",
+    "j","t","u","arguments","s","random",256,"floor","push","length","0",
+    "toString","y","charCodeAt"
+]
+
+# Now let's look at the main function that's being computed
+# The initial part sets up:
+# - f = 256 (lookup table size) -> from the final section
+# - e = a lookup/state table array of 256 bytes (the S-box for RC4/custom cipher)
+# - C = the key scheduling function
+# - i = Math
+# - h = btoa
+# - etc.
+
+# Let me find where 'f' and 'e' get their values in the final section
+# Looking at disasm around 15780+
+
+# The key insight from the loop structures:
+# Starting at PC 15814:
+#   s = 0; while s < 16: push random byte to 'a', s++
+# So 'a' = array of 16 random bytes? No wait - it checks 'C()'
+# Actually: C() is called, result in m
+# if m: 
+#   m = m[a[a.length-1]]  -- last element of a? Indexed by something
+#   Then proceeds with the m value as the key
+# If not m (i.e., if __ALIYUN_CRYPT is not defined):
+#   Generate 16 random bytes into a
+#   a = a.map(fn).join('') -> convert each byte to 2-hex-digit string
+# Then jump to final section
+
+# Let me read PC 15871-15980 more carefully from the raw bytecodes
+
+print("Bytecodes at PC 15871-15980:")
+for i in range(15871, 15982):
+    print(f"  F[{i}] = {F[i]}")
+
+PYEOF
+Output
+
+Bytecodes at PC 15871-15980:
+  F[15871] = 30
+  F[15872] = 43
+  F[15873] = 4
+  F[15874] = 50
+  F[15875] = 0
+  F[15876] = 1
+  F[15877] = 30
+  F[15878] = 43
+  F[15879] = 3
+  F[15880] = 27
+  F[15881] = 0
+  F[15882] = 33
+  F[15883] = 3
+  F[15884] = 1
+  F[15885] = 28
+  F[15886] = 15980
+  F[15887] = 6
+  F[15888] = 15978
+  F[15889] = 33
+  F[15890] = 3
+  F[15891] = 1
+  F[15892] = 30
+  F[15893] = 43
+  F[15894] = 2
+  F[15895] = 56
+  F[15896] = 1
+  F[15897] = 30
+  F[15898] = 43
+  F[15899] = 2
+  F[15900] = 56
+  F[15901] = 1
+  F[15902] = 43
+  F[15903] = 286
+  F[15904] = 56
+  F[15905] = 1
+  F[15906] = 43
+  F[15907] = 83
+  F[15908] = 22
+  F[15909] = 1
+  F[15910] = 27
+  F[15911] = 0
+  F[15912] = 43
+  F[15913] = 11
+  F[15914] = 43
+  F[15915] = 12
+  F[15916] = 7
+  F[15917] = 15921
+  F[15918] = 1
+  F[15919] = 31
+  F[15920] = 15957
+  F[15921] = 43
+  F[15922] = 0
+  F[15923] = 49
+  F[15924] = 0
+  F[15925] = 33
+  F[15926] = 0
+  F[15927] = 1
+  F[15928] = 43
+  F[15929] = 221
+  F[15930] = 9
+  F[15931] = 1
+  F[15932] = 28
+  F[15933] = 15938
+  F[15934] = 43
+  F[15935] = 287
+  F[15936] = 31
+  F[15937] = 15940
+  F[15938] = 43
+  F[15939] = 11
+  F[15940] = 43
+  F[15941] = 221
+  F[15942] = 30
+  F[15943] = 43
+  F[15944] = 0
+  F[15945] = 56
+  F[15946] = 1
+  F[15947] = 43
+  F[15948] = 288
+  F[15949] = 50
+  F[15950] = 1
+  F[15951] = 1
+  F[15952] = 18
+  F[15953] = 1
+  F[15954] = 25
+  F[15955] = 2
+  F[15956] = 11
+  F[15957] = 30
+  F[15958] = 43
+  F[15959] = 2
+  F[15960] = 56
+  F[15961] = 1
+  F[15962] = 43
+  F[15963] = 22
+  F[15964] = 50
+  F[15965] = 1
+  F[15966] = 1
+  F[15967] = 43
+  F[15968] = 23
+  F[15969] = 50
+  F[15970] = 1
+  F[15971] = 1
+  F[15972] = 30
+  F[15973] = 43
+  F[15974] = 2
+  F[15975] = 27
+  F[15976] = 0
+  F[15977] = 11
+  F[15978] = 31
+  F[15979] = 16833
+  F[15980] = 6
+  F[15981] = 16833
+```
+
+13. Tracing the actual VM hash algorithm - let's look at what 'y' function does at PC 15982 using:
+```bash
+python3 << 'PYEOF'
+import json
+
+with open('F_bytecode.txt') as f:
+    F = json.load(f)
+
+V = [
+    "o","r","a","m","C","e","f","i","p","h","d","",0,147,"n","fromCharCode",
+    252,241,249,246,240,231,"map","join",202,172,191,164,169,190,163,165,
+    87,56,53,61,50,52,35,156,250,233,242,255,232,245,243,108,24,3,63,30,
+    5,2,11,206,167,160,170,171,182,129,168,124,12,14,19,8,25,33,84,79,69,
+    68,71,72,"_",55,64,94,89,83,88,1,22,97,127,120,114,121,46,117,65,76,
+    75,77,90,74,115,54,95,82,110,29,36,166,152,159,149,158,134,78,66,85,
+    119,20,26,18,44,67,70,73,104,113,162,205,192,200,199,193,214,130,234,
+    239,238,230,215,207,204,151,211,248,244,226,227,181,146,132,148,133,
+    91,93,86,201,253,247,178,221,150,153,136,220,184,137,145,161,157,131,
+    179,154,142,135,28,125,106,123,155,128,32,45,37,42,59,111,57,38,40,
+    216,185,174,177,183,141,195,236,251,228,212,210,218,173,188,138,139,
+    143,144,175,187,180,4,7,34,194,223,229,15,49,58,96,10,101,16,41,107,
+    48,9,31,27,21,6,109,140,224,225,118,122,196,197,203,186,189,176,13,17,
+    43,99,23,47,103,112,237,80,105,102,98,213,126,81,100,92,116,51,62,219,
+    209,254,208,39,222,198,217,235,False,60,"Boolean","Number","String",
+    "j","t","u","arguments","s","random",256,"floor","push","length","0",
+    "toString","y","charCodeAt"
+]
+
+# Let's trace the bytecodes from 15982 onward (the main y function)
+# Entry is at 15989 (from F[15986]=15989)
+print("F[15982:16020]:")
+for i in range(15982, 16020):
+    print(f"  F[{i}] = {F[i]}", end="")
+    if F[i] == 43 and i+1 < len(F):
+        vi = F[i+1]
+        if vi < len(V):
+            print(f"  (PUSH_CONST V[{vi}]={repr(V[vi])})", end="")
+    print()
+
+print("\n\nTracing y function body (PC 15989+):")
+# From the disasm we saw:
+# 15989: PUSH_CONST V[0]='o', PUSH_CONST V[1]='r', BIND_ARGS 1
+# Then: VAR_DECL o, r, a, m, C, e, f, i (local scope vars)
+# Then: ...
+
+# Let me decode the exact sequence at 15989
+for i in range(15989, 16075):
+    print(f"  F[{i}] = {F[i]}", end="")
+    if F[i] in [43, 33, 21, 27, 56]:
+        vi = F[i+1] if i+1 < len(F) else -1
+        if vi < len(V) and vi >= 0:
+            print(f"  -> V[{vi}]={repr(V[vi])}", end="")
+    print()
+
+PYEOF
+Output
+
+F[15982:16020]:
+  F[15982] = 43  (PUSH_CONST V[289]='y')
+  F[15983] = 289
+  F[15984] = 7
+  F[15985] = 15989
+  F[15986] = 0
+  F[15987] = 31
+  F[15988] = 16815
+  F[15989] = 43  (PUSH_CONST V[0]='o')
+  F[15990] = 0
+  F[15991] = 43  (PUSH_CONST V[1]='r')
+  F[15992] = 1
+  F[15993] = 49
+  F[15994] = 1
+  F[15995] = 21
+  F[15996] = 2
+  F[15997] = 21
+  F[15998] = 3
+  F[15999] = 21
+  F[16000] = 4
+  F[16001] = 21
+  F[16002] = 5
+  F[16003] = 21
+  F[16004] = 6
+  F[16005] = 21
+  F[16006] = 14
+  F[16007] = 33
+  F[16008] = 0
+  F[16009] = 1
+  F[16010] = 30
+  F[16011] = 43  (PUSH_CONST V[10]='d')
+  F[16012] = 10
+  F[16013] = 50
+  F[16014] = 1
+  F[16015] = 1
+  F[16016] = 30
+  F[16017] = 43  (PUSH_CONST V[279]='u')
+  F[16018] = 279
+  F[16019] = 50
+
+
+Tracing y function body (PC 15989+):
+  F[15989] = 43  -> V[0]='o'
+  F[15990] = 0
+  F[15991] = 43  -> V[1]='r'
+  F[15992] = 1
+  F[15993] = 49
+  F[15994] = 1
+  F[15995] = 21  -> V[2]='a'
+  F[15996] = 2
+  F[15997] = 21  -> V[3]='m'
+  F[15998] = 3
+  F[15999] = 21  -> V[4]='C'
+  F[16000] = 4
+  F[16001] = 21  -> V[5]='e'
+  F[16002] = 5
+  F[16003] = 21  -> V[6]='f'
+  F[16004] = 6
+  F[16005] = 21  -> V[14]='n'
+  F[16006] = 14
+  F[16007] = 33  -> V[0]='o'
+  F[16008] = 0
+  F[16009] = 1
+  F[16010] = 30
+  F[16011] = 43  -> V[10]='d'
+  F[16012] = 10
+  F[16013] = 50
+  F[16014] = 1
+  F[16015] = 1
+  F[16016] = 30
+  F[16017] = 43  -> V[279]='u'
+  F[16018] = 279
+  F[16019] = 50
+  F[16020] = 1
+  F[16021] = 1
+  F[16022] = 30
+  F[16023] = 43  -> V[0]='o'
+  F[16024] = 0
+  F[16025] = 27  -> V[0]='o'
+  F[16026] = 0
+  F[16027] = 30
+  F[16028] = 43  -> V[0]='o'
+  F[16029] = 0
+  F[16030] = 56  -> V[1]='r'
+  F[16031] = 1
+  F[16032] = 43  -> V[286]='length'
+  F[16033] = 286
+  F[16034] = 56  -> V[1]='r'
+  F[16035] = 1
+  F[16036] = 30
+  F[16037] = 43  -> V[2]='a'
+  F[16038] = 2
+  F[16039] = 27  -> V[0]='o'
+  F[16040] = 0
+  F[16041] = 30
+  F[16042] = 43  -> V[1]='r'
+  F[16043] = 1
+  F[16044] = 56  -> V[1]='r'
+  F[16045] = 1
+  F[16046] = 43  -> V[286]='length'
+  F[16047] = 286
+  F[16048] = 56  -> V[1]='r'
+  F[16049] = 1
+  F[16050] = 30
+  F[16051] = 43  -> V[3]='m'
+  F[16052] = 3
+  F[16053] = 27  -> V[0]='o'
+  F[16054] = 0
+  F[16055] = 55
+  F[16056] = 0
+  F[16057] = 1
+  F[16058] = 30
+  F[16059] = 43  -> V[5]='e'
+  F[16060] = 5
+  F[16061] = 27  -> V[0]='o'
+  F[16062] = 0
+  F[16063] = 6
+  F[16064] = 16123
+  F[16065] = 21  -> V[0]='o'
+  F[16066] = 0
+  F[16067] = 43  -> V[12]=0
+  F[16068] = 12
+  F[16069] = 30
+  F[16070] = 43  -> V[0]='o'
+  F[16071] = 0
+  F[16072] = 27  -> V[0]='o'
+  F[16073] = 0
+  F[16074] = 37
+```
+
+Result: function y calculates hash with custom cipher
+
+14. Now we need full disassembly of the y() function from PC 15989 to 16838 we can get that using:
+```bash
+python3 << 'PYEOF'
+import json
+
+with open('F_bytecode.txt') as f:
+    F = json.load(f)
+
+V = [
+    "o","r","a","m","C","e","f","i","p","h","d","",0,147,"n","fromCharCode",
+    252,241,249,246,240,231,"map","join",202,172,191,164,169,190,163,165,
+    87,56,53,61,50,52,35,156,250,233,242,255,232,245,243,108,24,3,63,30,
+    5,2,11,206,167,160,170,171,182,129,168,124,12,14,19,8,25,33,84,79,69,
+    68,71,72,"_",55,64,94,89,83,88,1,22,97,127,120,114,121,46,117,65,76,
+    75,77,90,74,115,54,95,82,110,29,36,166,152,159,149,158,134,78,66,85,
+    119,20,26,18,44,67,70,73,104,113,162,205,192,200,199,193,214,130,234,
+    239,238,230,215,207,204,151,211,248,244,226,227,181,146,132,148,133,
+    91,93,86,201,253,247,178,221,150,153,136,220,184,137,145,161,157,131,
+    179,154,142,135,28,125,106,123,155,128,32,45,37,42,59,111,57,38,40,
+    216,185,174,177,183,141,195,236,251,228,212,210,218,173,188,138,139,
+    143,144,175,187,180,4,7,34,194,223,229,15,49,58,96,10,101,16,41,107,
+    48,9,31,27,21,6,109,140,224,225,118,122,196,197,203,186,189,176,13,17,
+    43,99,23,47,103,112,237,80,105,102,98,213,126,81,100,92,116,51,62,219,
+    209,254,208,39,222,198,217,235,False,60,"Boolean","Number","String",
+    "j","t","u","arguments","s","random",256,"floor","push","length","0",
+    "toString","y","charCodeAt"
+]
+
+r = F
+MAX = len(F)
+
+def opname(A):
+    return {0:'SHR_U',2:'SHL',3:'DEC_PROP',4:'NOP',5:'BIT_NOT',6:'CALL_IF',
+            7:'MAKE_FUNC',8:'INC_PROP',9:'LT',10:'LTE',11:'RETURN',
+            12:'GTE',13:'DUP_TOP',14:'JMP_TBL',15:'EQ_STRICT',16:'BUILD_STR',
+            17:'MOD',18:'ADD',19:'THROW',20:'AND',21:'VAR_DECL',22:'SUB',
+            23:'XOR',24:'GT',25:'RET_VAL',26:'MUL',27:'SET_PROP',28:'JIF_F',
+            29:'EQ_LOOSE',30:'PUSH_SCOPE',31:'JUMP',32:'JIF_T',33:'LOAD_VAR',
+            34:'PUSH_WIN',35:'TYPEOF',36:'NEQ_S',37:'CALL_WH',38:'OR',
+            39:'TRY',40:'DIV',41:'NEW',42:'IN',43:'PUSH_C',44:'PUSH_OBJ',
+            45:'DEL',46:'INST',47:'SET_IDX',48:'SHR',49:'BIND',50:'CALL_M',
+            51:'NEQ_L',52:'NOT',53:'POP_N',54:'PUSH_U',55:'BUILD_ARR',56:'GET_PROP'
+            }.get(A, f'?{A}')
+
+def dis1(pc):
+    if pc >= MAX: return f"{pc}: EOF", pc+1
+    A = r[pc]; n = pc+1
+    op = opname(A)
+    args = []
+    if A == 43:
+        vi = r[n]; n+=1
+        v = repr(V[vi]) if vi < len(V) else f'?'
+        args = [f'V[{vi}]={v}']
+    elif A == 33:
+        vi = r[n]; n+=1; push = r[n]; n+=1
+        v = repr(V[vi]) if vi < len(V) else f'?'
+        args = [f'V[{vi}]={v}', f'push={push}']
+    elif A == 21:
+        vi = r[n]; n+=1
+        v = repr(V[vi]) if vi < len(V) else f'?'
+        args = [f'V[{vi}]={v}']
+    elif A in [27,56,0,2,5,9,10,12,15,17,18,20,22,23,24,26,29,36,38,40,48,51,52]:
+        push = r[n]; n+=1; args=[f'push={push}']
+    elif A in [28,31,32,6,37]:
+        t = r[n]; n+=1; args=[f'->{t}']
+    elif A == 49:
+        cnt = r[n]; n+=1; args=[f'n={cnt}']
+    elif A in [55,16]:
+        cnt = r[n]; n+=1; push = r[n]; n+=1; args=[f'cnt={cnt}',f'push={push}']
+    elif A == 50:
+        na = r[n]; n+=1; push = r[n]; n+=1; args=[f'nargs={na}',f'push={push}']
+    elif A == 7:
+        entry = r[n]; n+=1; push = r[n]; n+=1; args=[f'entry={entry}',f'push={push}']
+    elif A in [8,3]:
+        pre=r[n];n+=1;push=r[n];n+=1;args=[f'pre={pre}',f'push={push}']
+    elif A == 53:
+        cnt=r[n];n+=1;push=r[n];n+=1;args=[f'cnt={cnt}',f'push={push}']
+    elif A == 25:
+        v=r[n];n+=1;args=[f'inline_val={v}']
+    return f"{pc:6d}: {op:12} {' '.join(str(a) for a in args)}", n
+
+# Trace from PC 15989 (y function entry) through 16838 - fully
+pc = 15989
+while pc < 16840:
+    line, next_pc = dis1(pc)
+    print(line)
+    pc = next_pc
+PYEOF
+Output
+
+ 15989: PUSH_C       V[0]='o'
+ 15991: PUSH_C       V[1]='r'
+ 15993: BIND         n=1
+ 15995: VAR_DECL     V[2]='a'
+ 15997: VAR_DECL     V[3]='m'
+ 15999: VAR_DECL     V[4]='C'
+ 16001: VAR_DECL     V[5]='e'
+ 16003: VAR_DECL     V[6]='f'
+ 16005: VAR_DECL     V[14]='n'
+ 16007: LOAD_VAR     V[0]='o' push=1
+ 16010: PUSH_SCOPE   
+ 16011: PUSH_C       V[10]='d'
+ 16013: CALL_M       nargs=1 push=1
+ 16016: PUSH_SCOPE   
+ 16017: PUSH_C       V[279]='u'
+ 16019: CALL_M       nargs=1 push=1
+ 16022: PUSH_SCOPE   
+ 16023: PUSH_C       V[0]='o'
+ 16025: SET_PROP     push=0
+ 16027: PUSH_SCOPE   
+ 16028: PUSH_C       V[0]='o'
+ 16030: GET_PROP     push=1
+ 16032: PUSH_C       V[286]='length'
+ 16034: GET_PROP     push=1
+ 16036: PUSH_SCOPE   
+ 16037: PUSH_C       V[2]='a'
+ 16039: SET_PROP     push=0
+ 16041: PUSH_SCOPE   
+ 16042: PUSH_C       V[1]='r'
+ 16044: GET_PROP     push=1
+ 16046: PUSH_C       V[286]='length'
+ 16048: GET_PROP     push=1
+ 16050: PUSH_SCOPE   
+ 16051: PUSH_C       V[3]='m'
+ 16053: SET_PROP     push=0
+ 16055: BUILD_ARR    cnt=0 push=1
+ 16058: PUSH_SCOPE   
+ 16059: PUSH_C       V[5]='e'
+ 16061: SET_PROP     push=0
+ 16063: CALL_IF      ->16123
+ 16065: VAR_DECL     V[0]='o'
+ 16067: PUSH_C       V[12]=0
+ 16069: PUSH_SCOPE   
+ 16070: PUSH_C       V[0]='o'
+ 16072: SET_PROP     push=0
+ 16074: CALL_WH      ->16114
+ 16076: LOAD_VAR     V[0]='o' push=1
+ 16079: PUSH_C       V[221]=16
+ 16081: LT           push=1
+ 16083: JIF_F        ->16112
+ 16085: LOAD_VAR     V[0]='o' push=1
+ 16088: PUSH_C       V[209]=4
+ 16090: SHL          push=1
+ 16092: LOAD_VAR     V[0]='o' push=1
+ 16095: PUSH_C       V[221]=16
+ 16097: MOD          push=1
+ 16099: ADD          push=1
+ 16101: PUSH_SCOPE   
+ 16102: PUSH_C       V[5]='e'
+ 16104: GET_PROP     push=1
+ 16106: PUSH_C       V[285]='push'
+ 16108: CALL_M       nargs=1 push=0
+ 16111: RETURN       
+ 16112: RET_VAL      inline_val=1
+ 16114: PUSH_SCOPE   
+ 16115: PUSH_C       V[0]='o'
+ 16117: INC_PROP     pre=0 push=0
+ 16120: JUMP         ->16074
+ 16122: RETURN       
+ 16123: PUSH_SCOPE   
+ 16124: PUSH_C       V[5]='e'
+ 16126: GET_PROP     push=1
+ 16128: PUSH_C       V[286]='length'
+ 16130: GET_PROP     push=1
+ 16132: PUSH_SCOPE   
+ 16133: PUSH_C       V[6]='f'
+ 16135: SET_PROP     push=0
+ 16137: CALL_IF      ->16311
+ 16139: VAR_DECL     V[0]='o'
+ 16141: PUSH_C       V[12]=0
+ 16143: PUSH_SCOPE   
+ 16144: PUSH_C       V[0]='o'
+ 16146: SET_PROP     push=0
+ 16148: VAR_DECL     V[2]='a'
+ 16150: PUSH_C       V[12]=0
+ 16152: PUSH_SCOPE   
+ 16153: PUSH_C       V[2]='a'
+ 16155: SET_PROP     push=0
+ 16157: CALL_WH      ->16302
+ 16159: LOAD_VAR     V[0]='o' push=1
+ 16162: LOAD_VAR     V[6]='f' push=1
+ 16165: LT           push=1
+ 16167: JIF_F        ->16300
+ 16169: LOAD_VAR     V[0]='o' push=1
+ 16172: LOAD_VAR     V[2]='a' push=1
+ 16175: ADD          push=1
+ 16177: PUSH_SCOPE   
+ 16178: PUSH_C       V[5]='e'
+ 16180: GET_PROP     push=1
+ 16182: PUSH_SCOPE   
+ 16183: PUSH_C       V[0]='o'
+ 16185: GET_PROP     push=1
+ 16187: GET_PROP     push=1
+ 16189: ADD          push=1
+ 16191: PUSH_SCOPE   
+ 16192: PUSH_C       V[5]='e'
+ 16194: GET_PROP     push=1
+ 16196: PUSH_SCOPE   
+ 16197: PUSH_C       V[2]='a'
+ 16199: GET_PROP     push=1
+ 16201: GET_PROP     push=1
+ 16203: ADD          push=1
+ 16205: PUSH_C       V[83]=1
+ 16207: SHR          push=1
+ 16209: LOAD_VAR     V[0]='o' push=1
+ 16212: LOAD_VAR     V[3]='m' push=1
+ 16215: MOD          push=1
+ 16217: PUSH_SCOPE   
+ 16218: PUSH_C       V[1]='r'
+ 16220: GET_PROP     push=1
+ 16222: PUSH_C       V[290]='charCodeAt'
+ 16224: CALL_M       nargs=1 push=1
+ 16227: ADD          push=1
+ 16229: LOAD_VAR     V[6]='f' push=1
+ 16232: PUSH_C       V[83]=1
+ 16234: SUB          push=1
+ 16236: AND          push=1
+ 16238: PUSH_SCOPE   
+ 16239: PUSH_C       V[2]='a'
+ 16241: SET_PROP     push=0
+ 16243: PUSH_SCOPE   
+ 16244: PUSH_C       V[5]='e'
+ 16246: GET_PROP     push=1
+ 16248: PUSH_SCOPE   
+ 16249: PUSH_C       V[0]='o'
+ 16251: GET_PROP     push=1
+ 16253: GET_PROP     push=1
+ 16255: PUSH_SCOPE   
+ 16256: PUSH_C       V[4]='C'
+ 16258: SET_PROP     push=0
+ 16260: PUSH_SCOPE   
+ 16261: PUSH_C       V[5]='e'
+ 16263: GET_PROP     push=1
+ 16265: PUSH_SCOPE   
+ 16266: PUSH_C       V[2]='a'
+ 16268: GET_PROP     push=1
+ 16270: GET_PROP     push=1
+ 16272: PUSH_SCOPE   
+ 16273: PUSH_C       V[5]='e'
+ 16275: GET_PROP     push=1
+ 16277: PUSH_SCOPE   
+ 16278: PUSH_C       V[0]='o'
+ 16280: GET_PROP     push=1
+ 16282: SET_PROP     push=0
+ 16284: LOAD_VAR     V[4]='C' push=1
+ 16287: PUSH_SCOPE   
+ 16288: PUSH_C       V[5]='e'
+ 16290: GET_PROP     push=1
+ 16292: PUSH_SCOPE   
+ 16293: PUSH_C       V[2]='a'
+ 16295: GET_PROP     push=1
+ 16297: SET_PROP     push=0
+ 16299: RETURN       
+ 16300: RET_VAL      inline_val=1
+ 16302: PUSH_SCOPE   
+ 16303: PUSH_C       V[0]='o'
+ 16305: INC_PROP     pre=0 push=0
+ 16308: JUMP         ->16157
+ 16310: RETURN       
+ 16311: CALL_IF      ->16590
+ 16313: VAR_DECL     V[1]='r'
+ 16315: PUSH_C       V[12]=0
+ 16317: PUSH_SCOPE   
+ 16318: PUSH_C       V[1]='r'
+ 16320: SET_PROP     push=0
+ 16322: VAR_DECL     V[3]='m'
+ 16324: PUSH_C       V[12]=0
+ 16326: PUSH_SCOPE   
+ 16327: PUSH_C       V[3]='m'
+ 16329: SET_PROP     push=0
+ 16331: VAR_DECL     V[14]='n'
+ 16333: PUSH_C       V[12]=0
+ 16335: PUSH_SCOPE   
+ 16336: PUSH_C       V[14]='n'
+ 16338: SET_PROP     push=0
+ 16340: CALL_WH      ->16581
+ 16342: LOAD_VAR     V[1]='r' push=1
+ 16345: LOAD_VAR     V[2]='a' push=1
+ 16348: LT           push=1
+ 16350: JIF_F        ->16579
+ 16352: LOAD_VAR     V[3]='m' push=1
+ 16355: LOAD_VAR     V[14]='n' push=1
+ 16358: XOR          push=1
+ 16360: PUSH_SCOPE   
+ 16361: PUSH_C       V[5]='e'
+ 16363: GET_PROP     push=1
+ 16365: PUSH_SCOPE   
+ 16366: PUSH_C       V[3]='m'
+ 16368: GET_PROP     push=1
+ 16370: GET_PROP     push=1
+ 16372: PUSH_SCOPE   
+ 16373: PUSH_C       V[5]='e'
+ 16375: GET_PROP     push=1
+ 16377: PUSH_SCOPE   
+ 16378: PUSH_C       V[14]='n'
+ 16380: GET_PROP     push=1
+ 16382: GET_PROP     push=1
+ 16384: XOR          push=1
+ 16386: ADD          push=1
+ 16388: LOAD_VAR     V[6]='f' push=1
+ 16391: PUSH_C       V[83]=1
+ 16393: SUB          push=1
+ 16395: AND          push=1
+ 16397: PUSH_SCOPE   
+ 16398: PUSH_C       V[14]='n'
+ 16400: SET_PROP     push=0
+ 16402: PUSH_SCOPE   
+ 16403: PUSH_C       V[5]='e'
+ 16405: GET_PROP     push=1
+ 16407: PUSH_SCOPE   
+ 16408: PUSH_C       V[3]='m'
+ 16410: GET_PROP     push=1
+ 16412: GET_PROP     push=1
+ 16414: PUSH_SCOPE   
+ 16415: PUSH_C       V[4]='C'
+ 16417: SET_PROP     push=0
+ 16419: PUSH_SCOPE   
+ 16420: PUSH_C       V[5]='e'
+ 16422: GET_PROP     push=1
+ 16424: PUSH_SCOPE   
+ 16425: PUSH_C       V[14]='n'
+ 16427: GET_PROP     push=1
+ 16429: GET_PROP     push=1
+ 16431: PUSH_SCOPE   
+ 16432: PUSH_C       V[5]='e'
+ 16434: GET_PROP     push=1
+ 16436: PUSH_SCOPE   
+ 16437: PUSH_C       V[3]='m'
+ 16439: GET_PROP     push=1
+ 16441: SET_PROP     push=0
+ 16443: LOAD_VAR     V[4]='C' push=1
+ 16446: PUSH_SCOPE   
+ 16447: PUSH_C       V[5]='e'
+ 16449: GET_PROP     push=1
+ 16451: PUSH_SCOPE   
+ 16452: PUSH_C       V[14]='n'
+ 16454: GET_PROP     push=1
+ 16456: SET_PROP     push=0
+ 16458: LOAD_VAR     V[1]='r' push=1
+ 16461: PUSH_SCOPE   
+ 16462: PUSH_C       V[0]='o'
+ 16464: GET_PROP     push=1
+ 16466: PUSH_C       V[290]='charCodeAt'
+ 16468: CALL_M       nargs=1 push=1
+ 16471: PUSH_SCOPE   
+ 16472: PUSH_C       V[4]='C'
+ 16474: SET_PROP     push=0
+ 16476: LOAD_VAR     V[4]='C' push=1
+ 16479: LOAD_VAR     V[3]='m' push=1
+ 16482: LOAD_VAR     V[14]='n' push=1
+ 16485: ADD          push=1
+ 16487: ADD          push=1
+ 16489: PUSH_SCOPE   
+ 16490: PUSH_C       V[4]='C'
+ 16492: SET_PROP     push=0
+ 16494: LOAD_VAR     V[4]='C' push=1
+ 16497: PUSH_SCOPE   
+ 16498: PUSH_C       V[5]='e'
+ 16500: GET_PROP     push=1
+ 16502: PUSH_SCOPE   
+ 16503: PUSH_C       V[3]='m'
+ 16505: GET_PROP     push=1
+ 16507: GET_PROP     push=1
+ 16509: PUSH_SCOPE   
+ 16510: PUSH_C       V[5]='e'
+ 16512: GET_PROP     push=1
+ 16514: PUSH_SCOPE   
+ 16515: PUSH_C       V[14]='n'
+ 16517: GET_PROP     push=1
+ 16519: GET_PROP     push=1
+ 16521: XOR          push=1
+ 16523: XOR          push=1
+ 16525: PUSH_SCOPE   
+ 16526: PUSH_C       V[4]='C'
+ 16528: SET_PROP     push=0
+ 16530: LOAD_VAR     V[4]='C' push=1
+ 16533: PUSH_C       V[43]=255
+ 16535: AND          push=1
+ 16537: PUSH_SCOPE   
+ 16538: PUSH_C       V[4]='C'
+ 16540: SET_PROP     push=0
+ 16542: LOAD_VAR     V[4]='C' push=1
+ 16545: PUSH_SCOPE   
+ 16546: PUSH_C       V[5]='e'
+ 16548: GET_PROP     push=1
+ 16550: PUSH_SCOPE   
+ 16551: PUSH_C       V[3]='m'
+ 16553: GET_PROP     push=1
+ 16555: SET_PROP     push=0
+ 16557: LOAD_VAR     V[3]='m' push=1
+ 16560: PUSH_C       V[83]=1
+ 16562: ADD          push=1
+ 16564: LOAD_VAR     V[6]='f' push=1
+ 16567: PUSH_C       V[83]=1
+ 16569: SUB          push=1
+ 16571: AND          push=1
+ 16573: PUSH_SCOPE   
+ 16574: PUSH_C       V[3]='m'
+ 16576: SET_PROP     push=0
+ 16578: RETURN       
+ 16579: RET_VAL      inline_val=1
+ 16581: PUSH_SCOPE   
+ 16582: PUSH_C       V[1]='r'
+ 16584: INC_PROP     pre=0 push=0
+ 16587: JUMP         ->16340
+ 16589: RETURN       
+ 16590: CALL_IF      ->16744
+ 16592: VAR_DECL     V[0]='o'
+ 16594: PUSH_C       V[12]=0
+ 16596: PUSH_SCOPE   
+ 16597: PUSH_C       V[0]='o'
+ 16599: SET_PROP     push=0
+ 16601: VAR_DECL     V[1]='r'
+ 16603: PUSH_C       V[12]=0
+ 16605: PUSH_SCOPE   
+ 16606: PUSH_C       V[1]='r'
+ 16608: SET_PROP     push=0
+ 16610: CALL_WH      ->16735
+ 16612: LOAD_VAR     V[0]='o' push=1
+ 16615: LOAD_VAR     V[6]='f' push=1
+ 16618: PUSH_C       V[83]=1
+ 16620: SHL          push=1
+ 16622: LT           push=1
+ 16624: JIF_F        ->16733
+ 16626: LOAD_VAR     V[0]='o' push=1
+ 16629: LOAD_VAR     V[6]='f' push=1
+ 16632: MOD          push=1
+ 16634: PUSH_SCOPE   
+ 16635: PUSH_C       V[1]='r'
+ 16637: SET_PROP     push=0
+ 16639: LOAD_VAR     V[1]='r' push=1
+ 16642: JIF_F        ->16689
+ 16644: CALL_IF      ->16687
+ 16646: PUSH_SCOPE   
+ 16647: PUSH_C       V[5]='e'
+ 16649: GET_PROP     push=1
+ 16651: PUSH_SCOPE   
+ 16652: PUSH_C       V[1]='r'
+ 16654: GET_PROP     push=1
+ 16656: GET_PROP     push=1
+ 16658: PUSH_SCOPE   
+ 16659: PUSH_C       V[5]='e'
+ 16661: GET_PROP     push=1
+ 16663: LOAD_VAR     V[1]='r' push=1
+ 16666: PUSH_C       V[83]=1
+ 16668: SUB          push=1
+ 16670: GET_PROP     push=1
+ 16672: XOR          push=1
+ 16674: PUSH_SCOPE   
+ 16675: PUSH_C       V[5]='e'
+ 16677: GET_PROP     push=1
+ 16679: PUSH_SCOPE   
+ 16680: PUSH_C       V[1]='r'
+ 16682: GET_PROP     push=1
+ 16684: SET_PROP     push=0
+ 16686: RETURN       
+ 16687: JUMP         ->16732
+ 16689: CALL_IF      ->16732
+ 16691: PUSH_SCOPE   
+ 16692: PUSH_C       V[5]='e'
+ 16694: GET_PROP     push=1
+ 16696: PUSH_SCOPE   
+ 16697: PUSH_C       V[1]='r'
+ 16699: GET_PROP     push=1
+ 16701: GET_PROP     push=1
+ 16703: PUSH_SCOPE   
+ 16704: PUSH_C       V[5]='e'
+ 16706: GET_PROP     push=1
+ 16708: LOAD_VAR     V[6]='f' push=1
+ 16711: PUSH_C       V[83]=1
+ 16713: SUB          push=1
+ 16715: GET_PROP     push=1
+ 16717: XOR          push=1
+ 16719: PUSH_SCOPE   
+ 16720: PUSH_C       V[5]='e'
+ 16722: GET_PROP     push=1
+ 16724: PUSH_SCOPE   
+ 16725: PUSH_C       V[1]='r'
+ 16727: GET_PROP     push=1
+ 16729: SET_PROP     push=0
+ 16731: RETURN       
+ 16732: RETURN       
+ 16733: RET_VAL      inline_val=1
+ 16735: PUSH_SCOPE   
+ 16736: PUSH_C       V[0]='o'
+ 16738: INC_PROP     pre=0 push=0
+ 16741: JUMP         ->16610
+ 16743: RETURN       
+ 16744: PUSH_C       V[11]=''
+ 16746: PUSH_C       V[12]=0
+ 16748: MAKE_FUNC    entry=16753 push=1
+ 16751: JUMP         ->16789
+ 16753: PUSH_C       V[0]='o'
+ 16755: BIND         n=0
+ 16757: LOAD_VAR     V[0]='o' push=1
+ 16760: PUSH_C       V[221]=16
+ 16762: LT           push=1
+ 16764: JIF_F        ->16770
+ 16766: PUSH_C       V[287]='0'
+ 16768: JUMP         ->16772
+ 16770: PUSH_C       V[11]=''
+ 16772: PUSH_C       V[221]=16
+ 16774: PUSH_SCOPE   
+ 16775: PUSH_C       V[0]='o'
+ 16777: GET_PROP     push=1
+ 16779: PUSH_C       V[288]='toString'
+ 16781: CALL_M       nargs=1 push=1
+ 16784: ADD          push=1
+ 16786: RET_VAL      inline_val=2
+ 16788: RETURN       
+ 16789: PUSH_SCOPE   
+ 16790: PUSH_C       V[5]='e'
+ 16792: GET_PROP     push=1
+ 16794: PUSH_C       V[22]='map'
+ 16796: CALL_M       nargs=1 push=1
+ 16799: PUSH_C       V[23]='join'
+ 16801: CALL_M       nargs=1 push=1
+ 16804: PUSH_SCOPE   
+ 16805: PUSH_C       V[14]='n'
+ 16807: SET_PROP     push=0
+ 16809: LOAD_VAR     V[14]='n' push=1
+ 16812: RET_VAL      inline_val=2
+ 16814: RETURN       
+ 16815: LOAD_VAR     V[0]='o' push=1
+ 16818: LOAD_VAR     V[1]='r' push=1
+ 16821: PUSH_SCOPE   
+ 16822: PUSH_C       V[289]='y'
+ 16824: CALL_M       nargs=2 push=1
+ 16827: PUSH_SCOPE   
+ 16828: PUSH_C       V[2]='a'
+ 16830: SET_PROP     push=0
+ 16832: RETURN       
+ 16833: LOAD_VAR     V[2]='a' push=1
+ 16836: RET_VAL      inline_val=2
+16838: EOF
+16839: EOF
+```
+
+15. By analysing the disassembly we can reconstruct it into javascript using:
+```js
+// ============================================================
+// Aliyun Captcha VM Hash — Full Reverse Engineering Notes
+// ============================================================
+//
+// ENTRY POINT called by the page:
+//   er = P(0, [], F, V, ez, [er, (td && td)(77, 19)]) + er
+//   where er = input JSON string, td = the salt token (e.g. '0000')
+//   ez = { r: 1 }  (means "return the pop value")
+//
+// P / t  is a stack-based virtual machine. Its opcodes live in F[]
+// and its constant pool lives in V[].
+//
+// ─────────────────────────────────────────────────────────────
+// IS THIS MD5?  NO.
+// ─────────────────────────────────────────────────────────────
+// window.__ALIYUN_CRYPT is undefined, so no external crypto lib
+// is in play. The output is 32 hex chars like MD5 but the algo
+// is entirely different — a custom 16-byte stateful stream cipher.
+//
+// ─────────────────────────────────────────────────────────────
+// WHY DOES parseInt MATTER?
+// ─────────────────────────────────────────────────────────────
+// The call site is:  (td && td)(77, 19)
+// When td is a STRING like '0000', this is  '0000'(77, 19) which
+// would throw in strict contexts, but in this VM the outer wrapper
+// evaluates td(77,19) differently. From the user's console tests:
+//
+//   t(0,[], F, V, ez, [input, '0000'])          -> '9333ef...'
+//   t(0,[], F, V, ez, [input, '0000000000001']) -> '4ed342...' (salt≠0)
+//   t(0,[], F, V, ez, [input, '0010'])          -> '70eb2c...' (salt≠0)
+//
+// The salt string is passed as-is to the y() function (argument[1]).
+// The KSA uses r.charCodeAt(i % m) on the RAW STRING, NOT parseInt.
+// The "salt doesn't matter when it's '0000'/'000'/'0'" observation
+// is explained purely by the KSA arithmetic: when every salt byte
+// is '0' (charCode 48), those 48s are added into j then masked to
+// (f-1)=15, which happens to produce the same permutation as any
+// other all-same-byte salt that maps to the same residue mod 16.
+// '0010' breaks it because charCode('1')=49 ≠ charCode('0')=48.
+//
+// ─────────────────────────────────────────────────────────────
+// ALGORITHM  (decompiled from VM bytecodes, exact formulae)
+// ─────────────────────────────────────────────────────────────
+//
+// function aliHash(inputStr, saltStr):
+//
+//   Phase 0 — UTF-8 encode  [PC 16007-16025]
+//     o = unescape(encodeURIComponent(inputStr))
+//     a = o.length          // byte length of UTF-8 encoded input
+//     r = saltStr
+//     m = r.length          // salt string length
+//
+//   Phase 1 — State init  [PC 16067-16135]
+//     e[i] = (i << 4) + (i % 16)   for i in [0..15]
+//     → e = [0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255]
+//     f = 16                // state size
+//
+//   Phase 2 — KSA (Key Schedule)  [PC 16139-16310]
+//     i = 0, j = 0
+//     while i < f:
+//       j = (((i + j + e[i] + e[j]) >> 1) + r.charCodeAt(i % m)) & (f-1)
+//       swap(e[i], e[j])
+//       i++
+//
+//   Phase 3 — PRGA (stream processing)  [PC 16313-16589]
+//     // local loop counter shadows outer 'r' (salt); 'o' (input str) still visible
+//     idx = 0, p = 0, q = 0
+//     while idx < a:          // a = UTF-8 input length
+//       q   = ((p ^ q) + (e[p] ^ e[q])) & (f-1)
+//       swap(e[p], e[q])
+//       C   = o.charCodeAt(idx)
+//       C   = (C + p + q) ^ e[p] ^ e[q]    // uses POST-swap e[p] and e[q]
+//       C   = C & 255
+//       e[p] = C
+//       p   = (p + 1) & (f-1)
+//       idx++
+//
+//   Phase 4 — Final diffusion  [PC 16592-16743]
+//     for step in [0 .. 2*f-1]:
+//       pos = step % f
+//       if pos != 0:  e[pos] ^= e[pos-1]
+//       else:         e[0]   ^= e[f-1]
+//
+//   Phase 5 — Hex encode  [PC 16744-16814]
+//     return e.map(b => (b < 16 ? '0' : '') + b.toString(16)).join('')
+//
+// ─────────────────────────────────────────────────────────────
+// IMPLEMENTATION
+// ─────────────────────────────────────────────────────────────
+
+function aliHash(inputStr, saltStr) {
+    // Phase 0: UTF-8 encode
+    var o = unescape(encodeURIComponent(inputStr));
+    var a = o.length;
+    var r = saltStr;
+    var m = r.length;
+
+    // Phase 1: State init  e[i] = (i<<4) + (i%16)
+    var e = [], f;
+    for (var _i = 0; _i < 16; _i++) {
+        e.push((_i << 4) + (_i % 16));
+    }
+    f = e.length; // 16
+
+    // Phase 2: KSA
+    var i = 0, j = 0, tmp;
+    while (i < f) {
+        j = (((i + j + e[i] + e[j]) >> 1) + r.charCodeAt(i % m)) & (f - 1);
+        tmp = e[i]; e[i] = e[j]; e[j] = tmp;
+        i++;
+    }
+
+    // Phase 3: PRGA
+    var idx = 0, p = 0, q = 0, C;
+    while (idx < a) {
+        q = ((p ^ q) + (e[p] ^ e[q])) & (f - 1);
+        tmp = e[p]; e[p] = e[q]; e[q] = tmp;
+        C = o.charCodeAt(idx);
+        C = (C + p + q) ^ e[p] ^ e[q];
+        C = C & 255;
+        e[p] = C;
+        p = (p + 1) & (f - 1);
+        idx++;
+    }
+
+    // Phase 4: Final diffusion
+    for (var step = 0; step < 2 * f; step++) {
+        var pos = step % f;
+        if (pos !== 0) {
+            e[pos] = e[pos] ^ e[pos - 1];
+        } else {
+            e[0] = e[0] ^ e[f - 1];
+        }
+    }
+
+    // Phase 5: Hex encode
+    return e.map(function(b) {
+        return (b < 16 ? '0' : '') + b.toString(16);
+    }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────
+// VERIFICATION
+// ─────────────────────────────────────────────────────────────
+
+var input = '{"TrackList":{"mc":"","tc":"","mu":"","te":"","mp":"","tmv":"","ks":"","fi":"","startTime":1782100652835},"TrackStartTime":1782100652835,"VerifyTime":1782100652862,"arg":"JjObDGdh/ywcWQ=="}';
+var expected = '9333ef7396dd56dbb9d6e8f31e8f6014';
+
+console.log('=== Verification ===');
+console.log('Expected : ' + expected);
+
+// All zero-byte salts produce the same result (charCode '0'=48, all map same)
+['0000', '000', '0'].forEach(function(s) {
+    var res = aliHash(input, s);
+    console.log('salt=' + JSON.stringify(s).padEnd(20) + ' -> ' + res + '  PASS=' + (res === expected));
+});
+
+// Salts with non-zero digits break it (charCode differs)
+['0010', '0000000000001', '1'].forEach(function(s) {
+    var res = aliHash(input, s);
+    console.log('salt=' + JSON.stringify(s).padEnd(20) + ' -> ' + res + '  PASS=' + (res === expected) + ' (expected different)');
+});
+
+// ─────────────────────────────────────────────────────────────
+// INTERMEDIATE STATE TRACE (for the given example, salt='0000')
+// ─────────────────────────────────────────────────────────────
+console.log('\n=== Intermediate state trace (salt="0000") ===');
+
+function aliHashTrace(inputStr, saltStr) {
+    var o = unescape(encodeURIComponent(inputStr));
+    var a = o.length;
+    var r = saltStr;
+    var m = r.length;
+
+    var e = [], f;
+    for (var _i = 0; _i < 16; _i++) e.push((_i << 4) + (_i % 16));
+    f = e.length;
+
+    console.log('Phase 1 - initial e: [' + e + ']');
+    console.log('  f=' + f + ', a (UTF-8 len)=' + a + ', m (salt len)=' + m);
+
+    var i = 0, j = 0, tmp;
+    while (i < f) {
+        j = (((i + j + e[i] + e[j]) >> 1) + r.charCodeAt(i % m)) & (f - 1);
+        tmp = e[i]; e[i] = e[j]; e[j] = tmp;
+        i++;
+    }
+    console.log('Phase 2 - after KSA:  [' + e + ']');
+
+    var idx = 0, p = 0, q = 0, C;
+    while (idx < a) {
+        q = ((p ^ q) + (e[p] ^ e[q])) & (f - 1);
+        tmp = e[p]; e[p] = e[q]; e[q] = tmp;
+        C = o.charCodeAt(idx);
+        C = (C + p + q) ^ e[p] ^ e[q];
+        C = C & 255;
+        e[p] = C;
+        p = (p + 1) & (f - 1);
+        idx++;
+    }
+    console.log('Phase 3 - after PRGA: [' + e + ']');
+
+    for (var step = 0; step < 2 * f; step++) {
+        var pos = step % f;
+        if (pos !== 0) e[pos] ^= e[pos - 1];
+        else           e[0]   ^= e[f - 1];
+    }
+    console.log('Phase 4 - after diff: [' + e + ']');
+
+    return e.map(function(b) { return (b<16?'0':'') + b.toString(16); }).join('');
+}
+
+var traced = aliHashTrace(input, '0000');
+console.log('Final:  ' + traced);
+console.log('Match:  ' + (traced === expected));
+JSEOF
+node /tmp/aliyun_hash_final.js
+Output
+
+=== Verification ===
+Expected : 9333ef7396dd56dbb9d6e8f31e8f6014
+salt="0000"               -> 9333ef7396dd56dbb9d6e8f31e8f6014  PASS=true
+salt="000"                -> 9333ef7396dd56dbb9d6e8f31e8f6014  PASS=true
+salt="0"                  -> 9333ef7396dd56dbb9d6e8f31e8f6014  PASS=true
+salt="0010"               -> 70eb2c0d763b5e3b78be269cc9a0fd28  PASS=false (expected different)
+salt="0000000000001"      -> 4ed342e636bf55896c0244fa419b6f1f  PASS=false (expected different)
+salt="1"                  -> 1002e563d3c7d303b20a36d2044d70ec  PASS=false (expected different)
+
+=== Intermediate state trace (salt="0000") ===
+Phase 1 - initial e: [0,17,34,51,68,85,102,119,136,153,170,187,204,221,238,255]
+  f=16, a (UTF-8 len)=189, m (salt len)=4
+Phase 2 - after KSA:  [204,136,238,51,34,170,17,68,85,187,102,119,0,153,255,221]
+Phase 3 - after PRGA: [124,71,124,64,121,174,192,6,239,13,81,37,246,124,126,155]
+Phase 4 - after diff: [147,51,239,115,150,221,86,219,185,214,232,243,30,143,96,20]
+Final:  9333ef7396dd56dbb9d6e8f31e8f6014
+Match:  true
+```
+
+### Hash function reverse engineering completed
