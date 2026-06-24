@@ -3159,3 +3159,14 @@ td(77,19) = '0000'
 // resolution
 P(0, [], F, V, ez, [er,'0000']) + er
 ```
+
+In order to find how hash is generated we must disassemble the virtual machine first 
+Using `disasm.py` we can get disassembly of the virtual machine after rversing xor encoded strings we will get 
+full disassembly of Virtual Machine using which we can reconstruct it in javascript
+
+## How i reverse engineered hash calculation
+
+1. Disassebmle Virtual Machine with appropriate bytecode and other arguments: `disasm.py`
+2. Finding xor encoded function/strings using `analyze.py`
+3. Decoding all the XOR-encoded strings that get assigned to variable names using `decode_strings.py`
+4. 
