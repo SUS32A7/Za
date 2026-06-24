@@ -1888,7 +1888,8 @@ import urllib.parse
 import uuid
 from datetime import datetime, timezone
 import requests
-                                                                                                                                                                          def generate_nonce():
+
+def generate_nonce():
     """Generate UUID v4 as SignatureNonce"""
     return str(uuid.uuid4())
 
