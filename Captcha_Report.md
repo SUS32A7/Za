@@ -2632,18 +2632,25 @@ console.log(n);
 JRMlgg0gGwVASQITewRNMEYjU1P7AMM7DGwWaiVYKOEKajqEHFh8RA1neYRfNAdR0XUQfSWw7h2PmQTbVpMbBWVFEHMdI1sENzToeHBDa0gdW0MRcxRcTwxEEp82HSfvd8K7Ri0JKSw7UW8jV31K21N3YXwcwT937U+vWYTVSox0hsdjInZNDW8WB3FzQ0Qkw0sBAAJLKT5CKRN3xwaLCX8bYxoLkQ9oKo5XTDQAZitmn0Qhdc/1Suikdj8OaWwhRjtEPlwSHmc=
 
 ### Function nf behaviour 
+```js
 console.log(t)
+
 {TrackList: {â€¦}, TrackStartTime: 1782021569701, VerifyTime: 1782021569717, arg: 'ZjyUTmpv9h8dBw=='}
+```
 
+```js
 nf(t)
-'JRMlgg0gGwVQeQITewRNMEbgUlclHnFEaXA2MWKm3fMsc1CfFaYZZjkfd3ASHyFF9bUHGneULV+hjAnpgZcDBJZsEmwZIGwMdCsQFi0xAFYVUUQYLwB4U9Y0MEgfFifSRy9VO85ZBx85VXMrSUtHPgKyQZJfzTF5DwWuBYXbfJwJmygJIBo0Y35rFRkTplQm0EhfERO9Kz98GhVWwX+bJjFlaxt4niZQxnEVEyYCehkVUVEwa8yXCjKUlyBtVk0KRx54Bg=='
 
+'JRMlgg0gGwVQeQITewRNMEbgUlclHnFEaXA2MWKm3fMsc1CfFaYZZjkfd3ASHyFF9bUHGneULV+hjAnpgZcDBJZsEmwZIGwMdCsQFi0xAFYVUUQYLwB4U9Y0MEgfFifSRy9VO85ZBx85VXMrSUtHPgKyQZJfzTF5DwWuBYXbfJwJmygJIBo0Y35rFRkTplQm0EhfERO9Kz98GhVWwX+bJjFlaxt4niZQxnEVEyYCehkVUVEwa8yXCjKUlyBtVk0KRx54Bg=='
+```
+
+```js
 nf('abcdef123456789')
 'JRMkbRAlaBM6LgIPamJf6WPtb2UkBx5abH4bHmS2BThZbDKC7ah/Xt0bN595ORYu8k0JPXOv6X2Vr8cJg5E7BpBSMVY='      
-
-#### Tests: whether function nf uses zlib compression or not 
-#### Setup : In function K added logger that logs arguments
-
+```
+`Tests:` **whether function nf uses zlib compression or not** 
+`Setup:` **In function K added logger that logs arguments**
+```js
 nf(t)
 
 [FUNCTION K LOG] ARGUMENTS: 'c6d9b3718aa286fe7290fbab8e7f66e2{"TrackList":{"mc":"","tc":"","mu":"","te":"","mp":"","tmv":"","ks":"","fi":"","startTime":1782022235313},"TrackStartTime":1782022235313,"VerifyTime":1782022235354,"arg":"fMR+GVZSAyc4Ng=="}'
@@ -2653,30 +2660,26 @@ nf('abcdef123456789')
 
 [FUNCTION K LOG] ARGUMENTS: 
 'f4aaf499d633c77792ccf444f4dd0b33"abcdef123456789"'
-
-
-
-## Focus 
-function tr
-function nf
-function K
+```
 
 ### Relation
+```js
 tr(26, 'test')
-'JRMkWWkGDigveSB2eABaM2cdclsffhBebh0gL0OrLcAuWVtA/UUFYQYbfIx0PgkT1VhpMBetN2vjjcQOioEnDQ=='
 
+'JRMkWWkGDigveSB2eABaM2cdclsffhBebh0gL0OrLcAuWVtA/UUFYQYbfIx0PgkT1VhpMBetN2vjjcQOioEnDQ=='
+```
+```js
 nf('test')
-VM1491 pe.059.f123b6c8830e46be.js:11138 undefined
 'JRMkWWkGDigveSB2eABaM2cdclsffhBebh0gL0OrLcAuWVtA/UUFYQYbfIx0PgkT1VhpMBetN2vjjcQOioEnDQ=='
+```
 
-
-### Most likely Reason 
-This code:
-
+`Most likely Reason` 
+**This code:**
+```js
 n = tr[(r && r)(52, 64)](this, 26)[i.B(r, Math.floor(237), 19)](this, arguments), e = 0
-
-## My Thoughts: Correct me if im wrong
-
+```
+**My Thoughts: Correct me if im wrong**
+```js
 i.B = function(t, n, e) { return t(n, e) }
 and r = function(t, n) { return i.B(te, n, t + 3) }
 //   which simplifies to: r(t, n) = te(n, t + 3)
@@ -2685,9 +2688,9 @@ r && r                          // r is truthy → evaluates to r itself
 r(52, 64)                       // call r with (52, 64)
 = te(64, 52 + 3)                // r(t,n) = te(n, t+3)
 = te(64, 55)                    // → returns a string (method name)
-
-Let's call this methodA = te(64, 55)
-
+```
+`Let's call this methodA = te(64, 55)`
+```js
 tr[te(64, 55)]                  // look up methodA on tr object
 (this, 26)                      // call it with this=context, 26=selector
 
@@ -2696,8 +2699,10 @@ i.B(r, 237, 19)                 // i.B(t,n,e) = t(n,e)
 = r(237, 19)                    // call r with (237, 19)
 = te(19, 237 + 3)               // r(t,n) = te(n, t+3)
 = te(19, 240)                   // → returns a string (method name)
-
-Now debug result shows r(52, 64)
+```
+**Now debug result shows:** 
+```js
+r(52, 64)
 'bind'
 r(237, 19)
 'apply'
@@ -2705,15 +2710,14 @@ te(64, 55)
 'bind'
 te(19, 240)
 'apply
-
+```
+```js
 // Resolved:
 n = tr.bind(this, 26).apply(this, arguments)
 
 Once again 
 n = tr(26, t) 
-
-
-
+```
 
 ### Function tr behaviour
 
@@ -2745,7 +2749,7 @@ VM44730:1 33 rA 𝑓 {$button: button#chat-captcha-trigger, captchaVerifyCallba
 
 Promise {<pending>}
 ```
-At this foint r doesnt have arg in it
+At this point r doesnt have arg in it
 
 Fifth call is
 ```js
