@@ -2718,76 +2718,89 @@ n = tr(26, t)
 ### Function tr behaviour
 
 The first tr call when i trigger verify captcha is:
-
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM41108:1 35 undefined undefined undefined undefined undefined
+
 true
-
+```
 The second call is 
-
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o); // decryption?
 VM42148:1 9 'FqJB6iRNVYdEGpwb' '7JLsB18MnA7GX3d6LxErT1sGT68xcVuOAoxz0b7vVzY=' undefined undefined undefined
+
 'LTAI5tSEBwYMwVKAQGpxmvTd'
-
+```
 Third call is 
-
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o); // decryption again?
 VM42659:1 9 'FqJB6iRNVYdEGpwb' 'n9jH0yACW8YrgOBcM0v7u45+/bfozcSz8ZpvzGBXg3E=' undefined undefined undefined
+
 'YSKfst7GaVkXwZYvVihJsKF9r89koz'
-
+```
 Fourth call is
-
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o); // xhr?
 VM44730:1 33 rA 𝑓 {$button: button#chat-captcha-trigger, captchaVerifyCallback: undefined, onBizResultCallback: undefined, success:, fail:} {TrackList: {â€¦}, TrackStartTime: 1782100652835, VerifyTime: 1782100652862} undefined undefined undefined
-Promise {<pending>}
 
+Promise {<pending>}
+```
 At this foint r doesnt have arg in it
 
 Fifth call is
-
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o); // device token generation 
 VM47310:1 36 '6iL4denBvY' undefined undefined undefined undefined
-'U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2Q0LWgtMTc4MjA5MzM1NzYyMC0wY2U5YzY2NTU2N2E0N2Q3OTBlNzNkNGE3MTgwNDMwNCNrUHNRYzl2NzB2YXBNdEl6YVVTWWZ4OUFndXBRSzd2RW5QOVpobmgxb1RsODBKWTVpYXFlQkhlWExIR2hDWUlmRHU2WkgrQXNQVk41SHNEWlB5MUNmOWVjVnExb1F6NGtwUkxJQkl1NXRhbVR4d0ZidERuY0ozT2FERTdqdDhtd2dIQ2QrYU5PQ0hlalJlU1A0L0ZoOTFUQzVFbWpCNzZMazQ1UzJvOHNWZmgrTHN0dWcvTW53emtBSUc1L0RBOXc5cGU0NWd1R0RKV21NSHBKTXJ5cm40VGpiTEsvcUxDa1hkcWlIdGkxbUpaRmxUd3N3MkVVcjAybVBxVGIzc3RZVS9INEQwSDVVZHpIUnovZ01jc1BmSnF3WEsyVmVVT2lNTjRYN3RXM3NqcWZadmxNcGtXelpiVnVMRWRLQytuY3ZqbDVZV0NGc0RuRjZrNGpYTkgyT25QdmY0bElIZCtxT25Fb2Ztem5KQ21YZ0JSTnNXK3h0WE90Wng5L0tXeVRWNVpYbHc1dmVHdk11bHhHQTQ0Z1ZZa0FqZExQdDN4ZktXTlFYUFB4K2lUNWdrbTZlRWx4QUV4TlVPanVaUzlHVW83NDcwN1RnbmQ4Y1lGelBxQUxjVDZUWXVoZEVLWEU0aXpoMThsSjR5UDgzSWpCeTFhWER3OVhnRUlLNk5HYzhxTTI1YlVlSVJpSGYwdXpLS0h5NlhGbjlWcmdJUGpUUFI0UmFFRW9XRUg3N0dwdVpkaDE0Yi9YRUQ2b3pUYWh5c3dpZVU2Sk9rZEZPWkRXdEtUbGx6MWMwZjRaWGpxaWIzN3VRRUo5NnJZUG80V2M2MGVXTDZFSVUvVDkraS9lb3J4SE8xTFhPVHoyYWhkYy92bWpIV3RPcWtFWlJXS1NBTFhvNmxuc0tuWjhoZmlxdnY3VGhJaVc0Wm9HZzJVMHJCeWtqajM3SnhBZnNmVXRQRm5oQ0JEWFVTakZhR3lMVjVKVmJjckp0UVdXMlRQRFBia0JrdXhwajI3WlNqV0NBRzBiSTlLRld1MUwzakhaVXEvQjYvYWZ6NmhFd1kyL0ZWczdzMDA0d3lsQnRHYVZtRC9zanlSMFF5STNEMTNtYlQ5d0pORUtpRFNLZ0U5dTVsTytuckswcDlxVUU5RCtVSmUyOUNXUnVWST0jNDQ4I2JiYjRlMmE5MjE5NzFmMDE2Nzk4NjRhZDk4MDEwOTlj'
 
+'U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2Q0LWgtMTc4MjA5MzM1NzYyMC0wY2U5YzY2NTU2N2E0N2Q3OTBlNzNkNGE3MTgwNDMwNCNrUHNRYzl2NzB2YXBNdEl6YVVTWWZ4OUFndXBRSzd2RW5QOVpobmgxb1RsODBKWTVpYXFlQkhlWExIR2hDWUlmRHU2WkgrQXNQVk41SHNEWlB5MUNmOWVjVnExb1F6NGtwUkxJQkl1NXRhbVR4d0ZidERuY0ozT2FERTdqdDhtd2dIQ2QrYU5PQ0hlalJlU1A0L0ZoOTFUQzVFbWpCNzZMazQ1UzJvOHNWZmgrTHN0dWcvTW53emtBSUc1L0RBOXc5cGU0NWd1R0RKV21NSHBKTXJ5cm40VGpiTEsvcUxDa1hkcWlIdGkxbUpaRmxUd3N3MkVVcjAybVBxVGIzc3RZVS9INEQwSDVVZHpIUnovZ01jc1BmSnF3WEsyVmVVT2lNTjRYN3RXM3NqcWZadmxNcGtXelpiVnVMRWRLQytuY3ZqbDVZV0NGc0RuRjZrNGpYTkgyT25QdmY0bElIZCtxT25Fb2Ztem5KQ21YZ0JSTnNXK3h0WE90Wng5L0tXeVRWNVpYbHc1dmVHdk11bHhHQTQ0Z1ZZa0FqZExQdDN4ZktXTlFYUFB4K2lUNWdrbTZlRWx4QUV4TlVPanVaUzlHVW83NDcwN1RnbmQ4Y1lGelBxQUxjVDZUWXVoZEVLWEU0aXpoMThsSjR5UDgzSWpCeTFhWER3OVhnRUlLNk5HYzhxTTI1YlVlSVJpSGYwdXpLS0h5NlhGbjlWcmdJUGpUUFI0UmFFRW9XRUg3N0dwdVpkaDE0Yi9YRUQ2b3pUYWh5c3dpZVU2Sk9rZEZPWkRXdEtUbGx6MWMwZjRaWGpxaWIzN3VRRUo5NnJZUG80V2M2MGVXTDZFSVUvVDkraS9lb3J4SE8xTFhPVHoyYWhkYy92bWpIV3RPcWtFWlJXS1NBTFhvNmxuc0tuWjhoZmlxdnY3VGhJaVc0Wm9HZzJVMHJCeWtqajM3SnhBZnNmVXRQRm5oQ0JEWFVTakZhR3lMVjVKVmJjckp0UVdXMlRQRFBia0JrdXhwajI3WlNqV0NBRzBiSTlLRld1MUwzakhaVXEvQjYvYWZ6NmhFd1kyL0ZWczdzMDA0d3lsQnRHYVZtRC9zanlSMFF5STNEMTNtYlQ5d0pORUtpRFNLZ0U5dTVsTytuckswcDlxVUU5RCtVSmUyOUNXUnVWST0jNDQ4I2JiYjRlMmE5MjE5NzFmMDE2Nzk4NjRhZDk4MDEwOTlj'
+```
 Note:
+```js
 decoded = SG_WEB#3795d28242a11619bc25f786f84e53d4-h-1782093357620-0ce9c665567a47d790e73d4a71804304#kPsQc9v70vapMtIzaUSYfx9AgupQK7vEnP9Zhnh1oTl80JY5iaqeBHeXLHGhCYIfDu6ZH+AsPVN5HsDZPy1Cf9ecVq1oQz4kpRLIBIu5tamTxwFbtDncJ3OaDE7jt8mwgHCd+aNOCHejReSP4/Fh91TC5EmjB76Lk45S2o8sVfh+Lstug/MnwzkAIG5/DA9w9pe45guGDJWmMHpJMryrn4TjbLK/qLCkXdqiHti1mJZFlTwsw2EUr02mPqTb3stYU/H4D0H5UdzHRz/gMcsPfJqwXK2VeUOiMN4X7tW3sjqfZvlMpkWzZbVuLEdKC+ncvjl5YWCFsDnF6k4jXNH2OnPvf4lIHd+qOnEofmznJCmXgBRNsW+xtXOtZx9/KWyTV5ZXlw5veGvMulxGA44gVYkAjdLPt3xfKWNQXPPx+iT5gkm6eElxAExNUOjuZS9GUo74707Tgnd8cYFzPqALcT6TYuhdEKXE4izh18lJ4yP83IjBy1aXDw9XgEIK6NGc8qM25bUeIRiHf0uzKKHy6XFn9VrgIPjTPR4RaEEoWEH77GpuZdh14b/XED6ozTahyswieU6JOkdFOZDWtKTllz1c0f4ZXjqib37uQEJ96rYPo4Wc60eWL6EIU/T9+i/eorxHO1LXOTz2ahdc/vmjHWtOqkEZRWKSALXo6lnsKnZ8hfiqvv7ThIiW4ZoGg2U0rBykjj37JxAfsfUtPFnhCBDXUSjFaGyLV5JVbcrJtQWW2TPDPbkBkuxpj27ZSjWCAG0bI9KFWu1L3jHZUq/B6/afz6hEwY2/FVs7s004wylBtGaVmD/sjyR0QyI3D13mbT9wJNEKiDSKgE9u5lO+nrK0p9qUE9D+UJe29CWRuVI=#448#bbb4e2a921971f01679864ad9801099c
-this part:kPsQc9v70vapMtIzaUSYfx9AgupQK7vEnP9Zhnh1oTl80JY5iaqeBHeXLHGhCYIfDu6ZH+AsPVN5HsDZPy1Cf9ecVq1oQz4kpRLIBIu5tamTxwFbtDncJ3OaDE7jt8mwgHCd+aNOCHejReSP4/Fh91TC5EmjB76Lk45S2o8sVfh+Lstug/MnwzkAIG5/DA9w9pe45guGDJWmMHpJMryrn4TjbLK/qLCkXdqiHti1mJZFlTwsw2EUr02mPqTb3stYU/H4D0H5UdzHRz/gMcsPfJqwXK2VeUOiMN4X7tW3sjqfZvlMpkWzZbVuLEdKC+ncvjl5YWCFsDnF6k4jXNH2OnPvf4lIHd+qOnEofmznJCmXgBRNsW+xtXOtZx9/KWyTV5ZXlw5veGvMulxGA44gVYkAjdLPt3xfKWNQXPPx+iT5gkm6eElxAExNUOjuZS9GUo74707Tgnd8cYFzPqALcT6TYuhdEKXE4izh18lJ4yP83IjBy1aXDw9XgEIK6NGc8qM25bUeIRiHf0uzKKHy6XFn9VrgIPjTPR4RaEEoWEH77GpuZdh14b/XED6ozTahyswieU6JOkdFOZDWtKTllz1c0f4ZXjqib37uQEJ96rYPo4Wc60eWL6EIU/T9+i/eorxHO1LXOTz2ahdc/vmjHWtOqkEZRWKSALXo6lnsKnZ8hfiqvv7ThIiW4ZoGg2U0rBykjj37JxAfsfUtPFnhCBDXUSjFaGyLV5JVbcrJtQWW2TPDPbkBkuxpj27ZSjWCAG0bI9KFWu1L3jHZUq/B6/afz6hEwY2/FVs7s004wylBtGaVmD/sjyR0QyI3D13mbT9wJNEKiDSKgE9u5lO+nrK0p9qUE9D+UJe29CWRuVI=
-is aes encryted with key 31646664393836656436633062643262 and iv words [808530483,875902519,943276354, 1128547654 ],sigBytes: 16
+```
+`this part:` kPsQc9v70vapMtIzaUSYfx9AgupQK7vEnP9Zhnh1oTl80JY5iaqeBHeXLHGhCYIfDu6ZH+AsPVN5HsDZPy1Cf9ecVq1oQz4kpRLIBIu5tamTxwFbtDncJ3OaDE7jt8mwgHCd+aNOCHejReSP4/Fh91TC5EmjB76Lk45S2o8sVfh+Lstug/MnwzkAIG5/DA9w9pe45guGDJWmMHpJMryrn4TjbLK/qLCkXdqiHti1mJZFlTwsw2EUr02mPqTb3stYU/H4D0H5UdzHRz/gMcsPfJqwXK2VeUOiMN4X7tW3sjqfZvlMpkWzZbVuLEdKC+ncvjl5YWCFsDnF6k4jXNH2OnPvf4lIHd+qOnEofmznJCmXgBRNsW+xtXOtZx9/KWyTV5ZXlw5veGvMulxGA44gVYkAjdLPt3xfKWNQXPPx+iT5gkm6eElxAExNUOjuZS9GUo74707Tgnd8cYFzPqALcT6TYuhdEKXE4izh18lJ4yP83IjBy1aXDw9XgEIK6NGc8qM25bUeIRiHf0uzKKHy6XFn9VrgIPjTPR4RaEEoWEH77GpuZdh14b/XED6ozTahyswieU6JOkdFOZDWtKTllz1c0f4ZXjqib37uQEJ96rYPo4Wc60eWL6EIU/T9+i/eorxHO1LXOTz2ahdc/vmjHWtOqkEZRWKSALXo6lnsKnZ8hfiqvv7ThIiW4ZoGg2U0rBykjj37JxAfsfUtPFnhCBDXUSjFaGyLV5JVbcrJtQWW2TPDPbkBkuxpj27ZSjWCAG0bI9KFWu1L3jHZUq/B6/afz6hEwY2/FVs7s004wylBtGaVmD/sjyR0QyI3D13mbT9wJNEKiDSKgE9u5lO+nrK0p9qUE9D+UJe29CWRuVI=
+**is aes encryted with key 31646664393836656436633062643262 and iv words [808530483,875902519,943276354, 1128547654 ],sigBytes: 16**
 
 Sixth call is  
-
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM53596:1 26 {TrackList: {â€¦}, TrackStartTime: 1782100652835, VerifyTime: 1782100652862, arg: 'JjObDGdh/ywcWQ=='} undefined undefined undefined undefined
+
 'JRMlgg0wDgRASAITRQpNEHEZuJsRBQZDtzsmAXNCL+49eDyEFKlLbSVgFq8aNiIiME9qeyVTKaKkiAQCrb8LIk1vCHMXJG0MOWjmeHE5GGodLkQQXSRFY+BCdntpe1A1ez2zBcgfEfU6c2QvXUxD9xl6TUFapw8G+yeTcaTTe5F3mQlxBGNkcnwbeHhhRzdYKVZ3+jKsH359DR9NImN7DT1alfp/cilvJJwZemkAVjVrnyssVj6RPRt0dV0ejXAUVxYEEnZxQEA='
-
+```
 Seventh call converts into Uint8array 
-
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM53612:1 30 '9333ef7396dd56dbb9d6e8f31e8f6014{"TrackList":{"mc":"","tc":"","mu":"","te":"","mp":"","tmv":"","ks":"","fi":"","startTime":1782100652835},"TrackStartTime":1782100652835,"VerifyTime":1782100652862,"arg":"JjObDGdh/ywcWQ=="}' undefined undefined undefined undefined
-
+```
 This returns uint8array of string
-
+```js
 Uint8Array(221)Â [57, 51, 51, 51, 101, 102, 55, 51, 57, 54, 100, 100, 53, 54, 100, 98, 98, 57, 100, 54, 101, 56, 102, 51, 49, 101, 56, 102, 54, 48, 49, 52, 123, 34, 84, 114, 97, 99, 107, 76, 105, 115, 116, 34, 58, 123, 34, 109, 99, 34, 58, 34, 34, 44, 34, 116, 99, 34, 58, 34, 34, 44, 34, 109, 117, 34, 58, 34, 34, 44, 34, 116, 101, 34, 58, 34, 34, 44, 34, 109, 112, 34, 58, 34, 34, 44, 34, 116, 109, 118, 34, 58, 34, 34, 44, 34, 107, 115, 34, 58,Â â€¦]
+```
 
 Eigth call is 
-
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM54357:1 26 {TrackList: {â€¦}, TrackStartTime: 1782100652835, VerifyTime: 1782100652862, arg: 'JjObDGdh/ywcWQ=='} undefined undefined undefined undefined
-'JRMlgg0wDgRASAITRQpNEHEZuJsRBQZDtzsmAXNCL+49eDyEFKlLbSVgFq8aNiIiME9qeyVTKaKkiAQCrb8LIk1vCHMXJG0MOWjmeHE5GGodLkQQXSRFY+BCdntpe1A1ez2zBcgfEfU6c2QvXUxD9xl6TUFapw8G+yeTcaTTe5F3mQlxBGNkcnwbeHhhRzdYKVZ3+jKsH359DR9NImN7DT1alfp/cilvJJwZemkAVjVrnyssVj6RPRt0dV0ejXAUVxYEEnZxQEA='
 
+'JRMlgg0wDgRASAITRQpNEHEZuJsRBQZDtzsmAXNCL+49eDyEFKlLbSVgFq8aNiIiME9qeyVTKaKkiAQCrb8LIk1vCHMXJG0MOWjmeHE5GGodLkQQXSRFY+BCdntpe1A1ez2zBcgfEfU6c2QvXUxD9xl6TUFapw8G+yeTcaTTe5F3mQlxBGNkcnwbeHhhRzdYKVZ3+jKsH359DR9NImN7DT1alfp/cilvJJwZemkAVjVrnyssVj6RPRt0dV0ejXAUVxYEEnZxQEA='
+```
 
 
 Ninth call is what sends the verifycaptchav3 request
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM56392:1 22 '{"sceneId":"didk33e0","certifyId":"6iL4denBvY","deviceToken":"U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2Q0LWgtMTc4MjA5MzM1NzYyMC0wY2U5YzY2NTU2N2E0N2Q3OTBlNzNkNGE3MTgwNDMwNCNrUHNRYzl2NzB2YXBNdEl6YVVTWWZ4OUFndXBRSzd2RW5QOVpobmgxb1RsODBKWTVpYXFlQkhlWExIR2hDWUlmRHU2WkgrQXNQVk41SHNEWlB5MUNmOWVjVnExb1F6NGtwUkxJQkl1NXRhbVR4d0ZidERuY0ozT2FERTdqdDhtd2dIQ2QrYU5PQ0hlalJlU1A0L0ZoOTFUQzVFbWpCNzZMazQ1UzJvOHNWZmgrTHN0dWcvTW53emtBSUc1L0RBOXc5cGU0NWd1R0RKV21NSHBKTXJ5cm40VGpiTEsvcUxDa1hkcWlIdGkxbUpaRmxUd3N3MkVVcjAybVBxVGIzc3RZVS9INEQwSDVVZHpIUnovZ01jc1BmSnF3WEsyVmVVT2lNTjRYN3RXM3Nqb0wvdW4xWHpGSFh4OE5yQ1d3b093cVVJMkVPVmdKeCtBNTYvR3FETlQyTGU4WFdudFdPcDcxYjhvY0ZTQkhJNytlVUljaGJRendXN2lmcnBkNnU1WTArdEZacjYvQ1J3ajRsWUlTUkJ1WFg0VTdueTFYOGkyd3JESXdMWDZKZkQ0SHZha1c1dFdEM09QOUpTczNVelFTMjJwSXZjYkY4cHF3WHdxdFgwU3MzNC9Qa0hvRDBxL3NacFZsWDEzL1hBYTcvZ1VWUUVXRWxyTXVpZis3TS9jaEdLV0NqUXF6dnZ6WEFCaDJFY3padk5PNG9lLy8yN2lTQTk5SG5BZDRWWDlmczBOV1czUUxxd1lsR2N6R2o2NmxXVk0wYWxzbHl2YWFXMjBHcE9XVzBkdGFUVXpJZVZvVUZTUHlEZWkyTHNJaWtuS0VlWEJvM3RJOGJRdDcrSklTRHdwVlZhRVdEU1FXbFBJMXdEeG5pOUtqY3prNWZHcEgvUlpNNmlnUFU3VkZtL2xrdmFDL2lQWXVPMC9jNThnYk5JTnVqUWRvS1dZWjk3NE04WlhjOHdUYXJLb0R6MUVPSCs3L0h1VWlkRVVHQ2M3b3VXYXY4ajMvL2ZqWGdDZmFiQ01meEJFcWRoaExEZ1NXL3ozVENxQ1VNQ2pQdTNFdVRpNjRqcjBSeUJPaGl2THVSNnk5U0YydmltamdVVHovM3A2M3NzV0VSTFF4My81aEg1T1hNeENHSG5GL3p0dmdNSjRTUmNJZmlyST0jNDQ4Izg1YjgxN2M2YmM4NzNjNTlkZDQ2OWRiMzhmNTk5YjA0","data":"JRMlgg0wDgRASAITRQpNEHEZuJsRBQZDtzsmAXNCL+49eDyEFKlLbSVgFq8aNiIiME9qeyVTKaKkiAQCrb8LIk1vCHMXJG0MOWjmeHE5GGodLkQQXSRFY+BCdntpe1A1ez2zBcgfEfU6c2QvXUxD9xl6TUFapw8G+yeTcaTTe5F3mQlxBGNkcnwbeHhhRzdYKVZ3+jKsH359DR9NImN7DT1alfp/cilvJJwZemkAVjVrnyssVj6RPRt0dV0ejXAUVxYEEnZxQEA="}' YÂ {immediate: true, UserCertifyId: undefined, DeviceConfig: undefined, deviceConfig: undefined, DeviceToken: 'U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2â€¦0OCMwZTI4OTcyMzdlZjcxYmRmMjkzMDA0YjRmNmQ4YTFiNg==',Â â€¦} undefined undefined undefined
+
 PromiseÂ {<pending>}
-
+```
 Next call is likely signnature generator
-
+```js
 console.log(t,e,r,i,a,o);  tr(t, e, r, i, a, o);
 VM65765:1 13 {AccessKeyId: 'LTAI5tSEBwYMwVKAQGpxmvTd', SignatureMethod: 'HMAC-SHA1', SignatureVersion: '1.0', Format: 'JSON', Timestamp: '2026-06-22T04:09:14Z',Â â€¦}AccessKeyId: "LTAI5tSEBwYMwVKAQGpxmvTd"Action: "VerifyCaptchaV3"CaptchaVerifyParam: "{\"sceneId\":\"didk33e0\",\"certifyId\":\"6iL4denBvY\",\"deviceToken\":\"U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2Q0LWgtMTc4MjA5MzM1NzYyMC0wY2U5YzY2NTU2N2E0N2Q3OTBlNzNkNGE3MTgwNDMwNCNrUHNRYzl2NzB2YXBNdEl6YVVTWWZ4OUFndXBRSzd2RW5QOVpobmgxb1RsODBKWTVpYXFlQkhlWExIR2hDWUlmRHU2WkgrQXNQVk41SHNEWlB5MUNmOWVjVnExb1F6NGtwUkxJQkl1NXRhbVR4d0ZidERuY0ozT2FERTdqdDhtd2dIQ2QrYU5PQ0hlalJlU1A0L0ZoOTFUQzVFbWpCNzZMazQ1UzJvOHNWZmgrTHN0dWcvTW53emtBSUc1L0RBOXc5cGU0NWd1R0RKV21NSHBKTXJ5cm40VGpiTEsvcUxDa1hkcWlIdGkxbUpaRmxUd3N3MkVVcjAybVBxVGIzc3RZVS9INEQwSDVVZHpIUnovZ01jc1BmSnF3WEsyVmVVT2lNTjRYN3RXM3Nqb0wvdW4xWHpGSFh4OE5yQ1d3b093cVVJMkVPVmdKeCtBNTYvR3FETlQyTGU4WFdudFdPcDcxYjhvY0ZTQkhJNytlVUljaGJRendXN2lmcnBkNnU1WTArdEZacjYvQ1J3ajRsWUlTUkJ1WFg0VTdueTFYOGkyd3JESXdMWDZKZkQ0SHZha1c1dFdEM09QOUpTczNVelFTMjJwSXZjYkY4cHF3WHdxdFgwU3MzNC9Qa0hvRDBxL3NacFZsWDEzL1hBYTcvZ1VWUUVXRWxyTXVpZis3TS9jaEdLV0NqUXF6dnZ6WEFCaDJFY3padk5PNG9lLy8yN2lTQTk5SG5BZDRWWDlmczBOV1czUUxxd1lsR2N6R2o2NmxXVk0wYWxzbHl2YWFXMjBHcE9XVzBkdGFUVXpJZVZvVUZTUHlEZWkyTHNJaWtuS0VlWEJvM3RJOGJRdDcrSklTRHdwVlZhRVdEU1FXbFBJMXdEeG5pOUtqY3prNWZHcEgvUlpNNmlnUFU3VkZtL2xrdmFDL2lQWXVPMC9jNThnYk5JTnVqUWRvS1dZWjk3NE04WlhjOHdUYXJLb0R6MUVPSCs3L0h1VWlkRVVHQ2M3b3VXYXY4ajMvL2ZqWGdDZmFiQ01meEJFcWRoaExEZ1NXL3ozVENxQ1VNQ2pQdTNFdVRpNjRqcjBSeUJPaGl2THVSNnk5U0YydmltamdVVHovM3A2M3NzV0VSTFF4My81aEg1T1hNeENHSG5GL3p0dmdNSjRTUmNJZmlyST0jNDQ4Izg1YjgxN2M2YmM4NzNjNTlkZDQ2OWRiMzhmNTk5YjA0\",\"data\":\"JRMlgg0wDgRASAITRQpNEHEZuJsRBQZDtzsmAXNCL+49eDyEFKlLbSVgFq8aNiIiME9qeyVTKaKkiAQCrb8LIk1vCHMXJG0MOWjmeHE5GGodLkQQXSRFY+BCdntpe1A1ez2zBcgfEfU6c2QvXUxD9xl6TUFapw8G+yeTcaTTe5F3mQlxBGNkcnwbeHhhRzdYKVZ3+jKsH359DR9NImN7DT1alfp/cilvJJwZemkAVjVrnyssVj6RPRt0dV0ejXAUVxYEEnZxQEA=\"}"CertifyId: "6iL4denBvY"Format: "JSON"SceneId: "didk33e0"SignatureMethod: "HMAC-SHA1"SignatureNonce: "99b9c6e8-31af-4fc5-8580-7de85d63d7ae"SignatureVersion: "1.0"Timestamp: "2026-06-22T04:09:14Z"Version: "2023-03-05"[[Prototype]]: Object 'YSKfst7GaVkXwZYvVihJsKF9r89koz' undefined undefined undefined
-'nrZkfG4wzTrgysSsOmq4HgEEwDE='
 
+'nrZkfG4wzTrgysSsOmq4HgEEwDE='
+```
 
 tr(11) also generates signature 
 
@@ -2798,17 +2811,22 @@ tr(14,e) url encodes e
 
 Correct me if im wrong
 Subject:
+```js
 nj = [nx.A(K, er), nx.F(O, (td || td)(10, 78))];
-
+```
+#### Lets deobfuscate
+```js
 nx.A = function(t,n) { return t(n)}
 
 After resolving 
 nj = [K(er),nx.F(O, td(10,78))];
-
+```
+```js
 console.log(er)
 
 3cf7c247ff063c6f65dadae1b49dae28{"TrackList":{"mc":"","tc":"","mu":"","te":"","mp":"","tmv":"","ks":"","fi":"","startTime":1782103567255},"TrackStartTime":1782103567255,"VerifyTime":1782103567286,"arg":"JSCTGEZbEAAgBQ=="} // MD5+JSON 
-
+```
+```js
 td = function(t, n) {
                             return nx.j(ti, ti)(nx.w(t, 7), n)
                         }
@@ -2827,6 +2845,7 @@ nx.w = function(t, n) {
 td = function(t, n) {
     return ti(t - 7, n)
 }
+```
 
 
 ```javascript
@@ -2878,8 +2897,8 @@ ti(78)
 ti(3)
 '4c63f913'
 
-#### Looks like ti function focuses on first argument
-
+#### It looks like ti function focuses on first argument
+```js
 ti(7)
 'ML_@JLdL'
 ti(7,6)
@@ -2888,14 +2907,19 @@ ti(6)
 'mobile'
 ti(6,7)
 'mobile'
-
+```
+```js
+// Value of td(10,78)
 console.log(td(10,78)) 
 '4c63f913'
-
+```
+```
+// nx.F function
 nx.F = function(t, n) {
                             return t + n
                         }
-
+```
+```js
 // Resolution
 
 nj = [K(er),O+td(10,78)];
@@ -2905,12 +2929,14 @@ O = td(219, 14)
 
 // Resolution
  nj = [K(er),'3e627e1b4c63f913'];
-
+```
+```js
 console.log(nj)
 [
     "eJx1jcEKwjAQRP9lzzm4aWLSQg+9iIgg2CJe05KWUCKaREVK/91AchI8vX3MsEO5LnuumGC8ZIgo+bBhapS66OUWBVugc2qYj8YHqBawA1QABEKmfWbX2e/Z7Ssds08cTaIPyoXO2NhHIWlcLLhEKVaShto/OYGLdmb8/EYUKQHlpvj9cH60++u72TXN7TTVNaxfJOs7Cg==",
     "3e627e1b4c63f913"
 ]
+```
 ```bash
 ~ $ echo eJx1jcEKwjAQRP9lzzm4aWLSQg+9iIgg2CJe05KWUCKaREVK/91AchI8vX3MsEO5LnuumGC8ZIgo+bBhapS66OUWBVugc2qYj8YHqBawA1QABEKmfWbX2e/Z7Ssds08cTaIPyoXO2NhHIWlcLLhEKVaShto/OYGLdmb8/EYUKQHlpvj9cH60++u72TXN7TTVNaxfJOs7Cg== | base64 -d | xxd | head -1
 00000000: 789c 758d c10a c230 1044 ff65 cf39 b869  x.u....0.D.e.9.i
@@ -3128,15 +3154,19 @@ var P = function t(n, e, r, i, a, o) {
 
 ```
 ### value of ez
-```json
+```js
+console.log(ez)
 {"r": 1}
 ```
 ### Value of td(77,19)
-```
+```js
+ti(70,19)
 '0000'
 ```
+
 ### Value of V
-```json
+```js
+console.log(V)
 [    "o",    "r",    "a",    "m",    "C",    "e",    "f",    "i",    "p",    "h",    "d",    "",    0,    147,    "n",    "fromCharCode",    252,    241,    249,    246,    240,    231,    "map",    "join",    202,    172,    191,    164,    169,    190,    163,    165,    87,    56,    53,    61,    50,    52,    35,    156,    250,    233,    242,    255,    232,    245,    243,    108,    24,    3,    63,    30,    5,    2,    11,    206,    167,    160,    170,    171,    182,    129,    168,    124,    12,    14,    19,    8,    25,    33,    84,    79,    69,    68,    71,    72,    "_",    55,    64,    94,    89,    83,    88,    1,    22,    97,    127,    120,    114,    121,    46,    117,    65,    76,    75,    77,    90,    74,    115,    54,    95,    82,    110,    29,    36,    166,    152,    159,    149,    158,    134,    78,    66,    85,    119,    20,    26,    18,    44,    67,    70,    73,    104,    113,    162,    205,    192,    200,    199,    193,    214,    130,    234,    239,    238,    230,    215,    207,    204,    151,    211,    248,    244,    226,    227,    181,    146,    132,    148,    133,    91,    93,    86,    201,    253,    247,    178,    221,    150,    153,    136,    220,    184,    137,    145,    161,    157,    131,    179,    154,    142,    135,    28,    125,    106,    123,    155,    128,    32,    45,    37,    42,    59,    111,    57,    38,    40,    216,    185,    174,    177,    183,    141,    195,    236,    251,    228,    212,    210,    218,    173,    188,    138,    139,    143,    144,    175,    187,    180,    4,    7,    34,    194,    223,    229,    15,    49,    58,    96,    10,    101,    16,    41,    107,    48,    9,    31,    27,    21,    6,    109,    140,    224,    225,    118,    122,    196,    197,    203,    186,    189,    176,    13,    17,    43,    99,    23,    47,    103,    112,    237,    80,    105,    102,    98,    213,    126,    81,    100,    92,    116,    51,    62,    219,    209,    254,    208,    39,    222,    198,    217,    235,    false,    60,    "Boolean",    "Number",    "String",    "j",    "t",    "u",    "arguments",    "s",    "random",    256,    "floor",    "push",    "length",    "0",    "toString",    "y",    "charCodeAt"]
 ```
 ### Salt mystery:
