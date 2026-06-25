@@ -2831,17 +2831,11 @@ console.log(er)
 3cf7c247ff063c6f65dadae1b49dae28{"TrackList":{"mc":"","tc":"","mu":"","te":"","mp":"","tmv":"","ks":"","fi":"","startTime":1782103567255},"TrackStartTime":1782103567255,"VerifyTime":1782103567286,"arg":"JSCTGEZbEAAgBQ=="} // MD5+JSON 
 ```
 ```js
-td = function(t, n) {
-                            return nx.j(ti, ti)(nx.w(t, 7), n)
-                        }
+td = function(t, n) {return nx.j(ti, ti)(nx.w(t, 7), n)}
 
-nx.j = function(t, n) {
-                                return t || n
-                            } 
+nx.j = function(t, n) {return t || n} 
 
-nx.w = function(t, n) {
-                            return t - n
-                        }
+nx.w = function(t, n) {return t - n}
 
 
 // Resolution
@@ -4775,11 +4769,13 @@ n_[nx.c(s, 99 * !-s, 88 * !-s)] = I,
                             return t(n, e)
                         }
 
-// resoltion
+// resolution
 
 n_[s(99 * !-s, 88 * !-s)] = I,
 
 s = function(t, n) { return (td || td)(w.U(t, 2), n)}
+w.U = function(t, n) {return t - n}
+s = function(t, n) {return td(t - 2, n);}
 
 -s = NaN
 !NaN = true
