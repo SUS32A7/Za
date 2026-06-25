@@ -4823,7 +4823,7 @@ NaN
 
 
 // Final thing
-In JavaScript, `NaN` is falsy (coerces to false in boolean contexts), but it is not equal to `false`:
+In JavaScript, NaN is falsy (coerces to false in boolean contexts), but it is not equal to false:
 
 !NaN = true
 !false = true
@@ -4856,8 +4856,21 @@ Object.keys(v)
 
 // These keys are arguments passed to interpereter P using P.apply(undefined,arguments)
 
-0 is the first argument and it resolves to `0`
-1 is the second arg resolving to `[]`
-2 is the third argument resolving to bytecode: 
+0 is the 1st argument and it resolves to `0`
+1 is the 2nd arg resolving to `[]`
+2 is the 3rd argument resolving to bytecode shown in L_bytecode.txt
+3 is the 4th arg resolving to constant pool R shown below
+4 is the 5th arg resolving to JSON {r:1}
+5 is the 6th arg resolving to variable m from the code m[y] = .... and it contains: ['dynamic-string','constant_string]
+eg ["IWZInZXnCl","4xrihv8zb8tf1mfj"]
+m[y] = m[1] = constant_string in this case 4xrihv8zb8tf1mfj
 
+P.apply(undefined,arguments) resolves to P(all the args from var v)
 ```
+
+**R constant Pool**
+```
+["o", "n", "r", "t", "e", "_", "Boolean", "a", "Number", "h", "String", "m", "", 0, 59, "fromCharCode", 90, 79, 84, 89, "map", "join", "C", 118, 20, 2, 25, 23, "l", 239, 138, 129, 140, 128, 139, 186, 189, 166, 172, 130, 159, 155, "c", 252, 152, 153, 147, 169, 174, 181, 191, 145, 146, 136, "f", 109, 8, 30, 14, 12, 29, "s", 220, 178, 185, 175, "arguments", 1, 32, 50, 10, 51, 6, 44, 37, 16, 46, 11, 62, 19, 43, 60, 33, 53, 34, 7, 26, 48, 5, 4, 61, 13, 47, 49, 18, 27, 22, 17, 39, 56, 41, 38, 55, 31, 15, 58, 52, 40, 57, 45, 35, 36, 42, 54, 63, 3, 24, 28, 9, 21, "length", "charCodeAt", 255, null, "call"]
+          
+```
+
