@@ -1271,7 +1271,7 @@ Decoded:
 
 --- 
 
-## 9. Verify Captcha Payload Observation [pe.<hash>.js]
+## 9. Verify Captcha Payload Observation File:pe.059.f123b6c8830e46be.js
 
 ### The request
 
@@ -2147,7 +2147,7 @@ Final:  9333ef7396dd56dbb9d6e8f31e8f6014
 Match:  true
 ```
 
-### Hash function reverse engineering completed more details at [VMachine_HASH](../VMachine_Hash_report.md)
+### Hash function reverse engineering completed more details at [VMachine_HASH](./VM_hash_gen_report.md)
 
 ## 12. TrackJson `arg` Value Generation
 
