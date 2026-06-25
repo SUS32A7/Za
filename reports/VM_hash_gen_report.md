@@ -86,7 +86,7 @@ PC 15172   → call C(), check result
 PC 15980   → define y(), call y(input, salt) → the hash
 PC 16833   → return result
 ```
-`C()` is the fingerprinting function. `y()` is the hash function we already decoded. They connect at one point: if `C()` returns falsy (integer `0`, meaning clean browser), `y(input, salt)` runs and produces your hash. If `C()` returns truthy (bot detected or cached key), a different path executes.
+`C()` is the fingerprinting function. `y()` is the hash function i already decoded. They connect at one point: if `C()` returns falsy (integer `0`, meaning clean browser), `y(input, salt)` runs and produces our hash. If `C()` returns truthy (bot detected or cached key), a different path executes.
 
 ---
 
