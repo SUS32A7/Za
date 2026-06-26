@@ -2260,6 +2260,9 @@ m[y] = k + (~s ? s : 8)(22, 44)
 // k = nx.c(s, 10, 11))
 // s(10,11) = rxy2kxiu
 // s(22,44) = '8g52k8hy'
+// Resolves: m[y] = 'rxy2kxiu8g52k8hy'
+
+// Case 4:
 ```
 
 **R constant Pool**
