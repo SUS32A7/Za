@@ -65,7 +65,7 @@ function generateArg(certifyId, constant) {
 // ================================================================
 // VERIFICATION
 // ================================================================
-// v[5] = ["HtnQAvpxNp", "4xrihv8zb8tf1mfj"]
+// v[5] = ["certID", "4xrihv8zb8tf1mfj"]
 var certifyId = "HtnQAvpxNp";
 var constant  = "4xrihv8zb8tf1mfj";
 
