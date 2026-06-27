@@ -1,4 +1,5 @@
-Fielin js
+**window.z_um.getToken Definition**
+```js
 // For verify captcha t is certify id but it works even without that
 function st(t, r, e) {
             var n, i, a, o, u;
@@ -327,8 +328,10 @@ function cG(t, r, e, n) {
             return i
         }
 
+```
 
-# Function i return t holds deviceToken
+**Function i return t holds deviceToken**
+```js
  i = function() {
                         var t, r, e, n, i, a, o, c, s, f, l, h, d, v, p, b, w, g, m, y, k, M, O, N, S, x, U, I, A, T, R, C, B, F, E, H, Y, q, J, z, j, P, L, V, D, Q, K, Z, G, X, _, W, $, tt, tr, te, tn, ti, ta, to, tu, tc, ts, tf, tl, th, td, tv, tp, tb, tw, tg, tm, ty, tk, tM, tO, tN, tS, tx, tU, tI, tA, tT, tR;
                         for (r = 112; r; )
@@ -595,17 +598,22 @@ function cG(t, r, e, n) {
                             }
                         return t
                     }(d, v, l))
-
-
-
+```
+**VAR T RELATION**
+```
 t = X
 X=v
 v = t8[J] = t8['DeviceToken']
-
-g = n5(C, null, null, h)
+```
+**PAYLOA GEN**
+```
+g = n5(C, null, null, h) // C = payload, h = false
 g = DeviceToken
-
+```
+**DEOBFUSCATION GENERATOR**
+```js
 function n5(t,r,e,n){function i(t,r){return(nV||nV)(t,r- -9)}return nD[i(91,18)](this,13)[(i&&i)(2,8)](this,arguments)}
+
 function nV(t,r){var e,n,i;for(n=3;n;)n<=1?n<1||(i.c=function(t,r){return t-r},n^=3):n>=3?(i={},n-=2):(n-=2,e=(~nQ?nQ:5)(i.c(r,9),t));return e}
 i(91,18)
 'bind'
@@ -618,9 +626,10 @@ nD[i(91, 18)](this, 13)[(i && i)(2, 8)](this, arguments)
 nD.bind(this,13).apply(this,arguments)
 
 nD(13,arguments)
+```
 
-
-# Function nD
+**Function nD***
+```js
 function nD(t, r, e, n, i) {
             var a, o, u, s, f, l, h, d, v, p, b, w, g, m, y, k, M, O, N, S, x, U, I, A, T, R, C, B, F, E, H, Y, q, J, z, j, P, L, V, D, Q, K, Z, G, X, _, W, $, tt, tr, te, tn, ti, ta, to, tu, tc, ts, tf, tl, th, td, tv, tp, tb, tw, tg, tm, ty, tk, tM, tO, tN, tS, tx, tU, tI, tA, tT, tR, tC, tB, tF, tE, tH, tY, tq, tJ;
             for (o = 19; o; )
@@ -940,35 +949,42 @@ function nD(t, r, e, n, i) {
             return a
         } 
 
+```
 
-
-# Test
+**Test**
 
 **NORMAL DEVICE TOKEN**:
+```
 U0dfV0VCIzM3OTVkMjgyNDJhMTE2MTliYzI1Zjc4NmY4NGU1M2Q0LWgtMTc4MjUzMTc4MzcyMC1hYzllNDdhNzZlZWU0NDMwODc5NDNhMjc4ZjE5MTY0MiNXM0FTUGxXZmx2SWI1YlJWV2RpbnlJdHA1WXIwOGxVMTY1VEs3KzlTWGJYMmlOcTBLU0J3ZUJBTG1hMFlLaFhJNE5iUFVvLzVOeG0xSEsyemRXTHJXQUdGN3FXWWxhSW1xaEtsVkRzbEd4OXdhNnRSSGNIOFlBUWhtNVltWk14ZGM5cCsxSlRpM1FoVDg0YmYvREJpY0tWenZRS2haaUVPaExFM1hQaitCcmViblRzN1cycStBY1BvU2swdldRWnBSL1lIUE5qMkZ0bTRraTJKZnJ3NXNvMTFLTkw1QjN5ZERVbHpLbXV2Tnh0OHZYVHNOMHJtY1ZuRWluT1E1cjMvd2lOVkdrdHpsQ1k3VFR0YTAvUFpVa2VvM2M5N2F6d3dIbE1NZERENEhzREpkYmdTQzRmcE1idGovSGtoUGViWTRVK3orNHJHT3JDclRmSGV2UllyNFlxTGwzZFIvb1pHVFdhanBzRmhoTUoraThTNHN1bmlRZ1dmOXRnK1pMckg4b3hQNFl0TGpCOHZBdk10K1FPNjZSbGFuRjhsK08wZ2gvbVJ0Zmdla1pYaVN3TjdJTVc4dzhwRlE2d2RlOURUeS96Nk5wQ0xNemg3Mm1waHhyMnBHSGpBMTlHL1kweUw5OTBGa2hBNjY5eVJraUdVNWQxeTREWWxEZmNpemU4dVFWY1lLNituckhlSFVJcVlsajFCQjF6QzJvK3NRSmxsWmdORjMxYzNKMHZlRTFONGtyaTdJdzNnYTdsK3BIOWM1bnFVQmFXS1pNRnRvRHpSZnRHWUw4cWhHa0dWaVBadU9FTE0zYlQ3NWdIdmhQTGdsdkRNSmxmeE10Yk1teXZZTis3c2k1eHh2WjhNaFFMeG1VSUJDZ0NLVERrTGVNcm43Z3Y5bzBpaGNFT3JOTGJLZjh2R0VHMnIzSjhWR1pPVnRTSkNkMG53ak9JMlYyOTFSZ2NUazVOTmJWZWp1a2ZEdlNmNmU2eHE2ZjZBVkJpUWE3ZUszMnZVOXZtakVaeWw2d1owVFlTRGdMOVovaTVoQW5NSXJpdzB4aE55eFpVbWpTSThrVmtTRC9lRGg2R3A4UzM1MnlZOWkzZDB0T3FaMWoxWW5yUEZlelA4bmlhUi9ndklQdz09IzUyNCNkNzY5NDYwZDEzNWU3NzQzMTBkNjY1YzI5MmM0MWU5NQ==
+```
 **DECODED**:
+```
 SG_WEB#3795d28242a11619bc25f786f84e53d4-h-1782531783720-ac9e47a76eee443087943a278f191642#W3ASPlWflvIb5bRVWdinyItp5Yr08lU165TK7+9SXbX2iNq0KSBweBALma0YKhXI4NbPUo/5Nxm1HK2zdWLrWAGF7qWYlaImqhKlVDslGx9wa6tRHcH8YAQhm5YmZMxdc9p+1JTi3QhT84bf/DBicKVzvQKhZiEOhLE3XPj+BrebnTs7W2q+AcPoSk0vWQZpR/YHPNj2Ftm4ki2Jfrw5so11KNL5B3ydDUlzKmuvNxt8vXTsN0rmcVnEinOQ5r3/wiNVGktzlCY7TTta0/PZUkeo3c97azwwHlMMdDD4HsDJdbgSC4fpMbtj/HkhPebY4U+z+4rGOrCrTfHevRYr4YqLl3dR/oZGTWajpsFhhMJ+i8S4suniQgWf9tg+ZLrH8oxP4YtLjB8vAvMt+QO66RlanF8l+O0gh/mRtfgekZXiSwN7IMW8w8pFQ6wde9DTy/z6NpCLMzh72mphxr2pGHjA19G/Y0yL990FkhA669yRkiGU5d1y4DYlDfcize8uQVcYK6+nrHeHUIqYlj1BB1zC2o+sQJllZgNF31c3J0veE1N4kri7Iw3ga7l+pH9c5nqUBaWKZMFtoDzRftGYL8qhGkGViPZuOELM3bT75gHvhPLglvDMJlfxMtbMmyvYN+7si5xxvZ8MhQLxmUIBCgCKTDkLeMrn7gv9o0ihcEOrNLbKf8vGEG2r3J8VGZOVtSJCd0nwjOI2V291RgcTk5NNbVejukfDvSf6e6xq6f6AVBiQa7eK32vU9vmjEZyl6wZ0TYSDgL9Z/i5hAnMIriw0xhNyxZUmjSI8kVkSD/eDh6Gp8S352yY9i3d0tOqZ1j1YnrPFezP8niaR/gvIPw==#524#d769460d135e774310d665c292c41e95
+```
 
-
-
+**TEST CALL**
+```js
 nd(13,[],undefined,undefined,false)
-
+```
 **RESULTED DECODED TOKEN**:
+```
 SG_WEB#3795d28242a11619bc25f786f84e53d4-h-1782531783720-ac9e47a76eee443087943a278f191642##0#160d05bbafcaefb0aa5f74c6164a8a0e 
+```
+Looks like C is used to generate encrypted Data and C.GatherCount  is used to generate the GatherCount which is undefined so it sets to 0
 
-Means the C is used to generate encrypted Data and its legnth is used to generate the #GatherCount#
-
-## Before return a variable d ( defined as: d = [tF, Q, w, tC, p]) holds the payload data
-
+**Before `return a` statement variable d (defined as: d = [tF, Q, w, tC, p]) holds the payload data**
 In case of normal call it was like this:
- [
+ ```js
+[
     "SG_WEB",
     "3795d28242a11619bc25f786f84e53d4-h-1782531783720-ac9e47a76eee443087943a278f191642",
     "W3ASPlWflvIb5bRVWdinyItp5Yr08lU165TK7+9SXbX2iNq0KSBweBALma0YKhXI4NbPUo/5Nxm1HK2zdWLrWAGF7qWYlaImqhKlVDslGx9wa6tRHcH8YAQhm5YmZMxdc9p+1JTi3QhT84bf/DBicKVzvQKhZiEOhLE3XPj+BrebnTs7W2q+AcPoSk0vWQZpR/YHPNj2Ftm4ki2Jfrw5so11KNL5B3ydDUlzKmuvNxt8vXTsN0rmcVnEinOQ5r3/wiNVGktzlCY7TTta0/PZUkeo3c97azwwHlMMdDD4HsAx39qSngjoj9hvRQ50yFDSZx2RM3yFh75F2o+5JVo1iMQ+x5YS7K917IeeQNG9B7VcQZ/MxvPUSS6lsZQzNXZcaA+bcCF1e3K2XOwEw5Amy8vEuoUY7b59RjZW0SYSpjjxOyloQ/7rVzDO+f/t2h/+OhqYi2S9CbgQQ7B9VjSlBJh6t2/3m3hZzc8+9VnU4EKmm4O/fvfsr04WL66aPY7Ujt8yCqArpZc7QGxSFLvhgnamfDK8UtIGsMjrDEdKj4AMeznTQPjv4ujlXzphU24N4SQoTTgvS9Y3TUvffWK7+kH4qhvJiBDT9cB87Mx/P1pqnrEM0PmQZemV8iME/ct1DnCm4EXYuUqEIihf9Kdy/YQGVr4DOGGEsA7LOtFbRKQVAras+AIdchlIidqKZpKUCW5G6e19Tr1uvg3UBfYuBwihre6mI8H23K5wL/xnhyrTR+ctxccdGkXUVp8yT4DQag2r5x8+kHDwDfU3Nt63O9UowFcrxade6vB7Pp6vBOQMsrpKYW2eCnPwMsuLDtvnxgcCUvMVh+XtQ0I2o9P5LQ==",
     524,
     "0f9cdacd5f121f7c0a94c5a57a922b63"
 ]
+```
 In case of our test call it was like this:
+```
 [
     "SG_WEB",
     "3795d28242a11619bc25f786f84e53d4-h-1782531783720-ac9e47a76eee443087943a278f191642",
@@ -976,19 +992,18 @@ In case of our test call it was like this:
     0,
     "160d05bbafcaefb0aa5f74c6164a8a0e"
 ]
-
+```
 
 
 ### THE VARS IN THE ARRAY:
 1. tF = Y[R]
-Y = t8[S.X(tn, [19, tn()][0], [39, tn()][0])]
-tn(19, 39) = WEB_REGION
-Y = t8.WEB_REGION
 
-Y = {
-    "CN": "WEB",
-    "SG": "SG_WEB"
-}
+Y = t8[S.X(tn, [19, tn()][0], [39, tn()][0])]
+
+tn(19, 39) = WEB_REGION
+
+Y = t8.WEB_REGION
+Y = {"CN": "WEB","SG": "SG_WEB"}
 R = 'SG'
 
 tF = 'SG_WEB'
