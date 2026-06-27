@@ -1027,12 +1027,16 @@ tR = t8['sessionId']
 ts = rm(tB, g)
 tB = t8[tn.call(9, 48, 9)]
 tB = t8.ACCESS_SEC
+FqJB6iRNVYdEGpwb
 
 g = t8[S.X(tn, (tn(), 27), (tn(), 41))]
 g = t8[tn(27,41) = t8.secretKey
+FNW8NwwxZBD3Dagg4V6FIu3Oc2SCmhWgMjILaT1lE9Y=
 
 ts = T
-w = rm(ts, N)
+w = rg(ts, N)
+
+N = n6(l, 501)
 
 4. tC = h
 
