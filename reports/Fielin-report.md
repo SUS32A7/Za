@@ -996,6 +996,7 @@ In case of our test call it was like this:
 
 
 ### THE VARS IN THE ARRAY:
+
 1. tF = Y[R]
 
 Y = t8[S.X(tn, [19, tn()][0], [39, tn()][0])]
@@ -1003,49 +1004,76 @@ Y = t8[S.X(tn, [19, tn()][0], [39, tn()][0])]
 tn(19, 39) = WEB_REGION
 
 Y = t8.WEB_REGION
+
 Y = {"CN": "WEB","SG": "SG_WEB"}
+
 R = 'SG'
 
 tF = 'SG_WEB'
 
 2. Q = tm
+
 Q = tm
+
 tm = rm(tN, tR)
 
 tN = t8[tn(48, 9)]
+
 tn(48,9) = 'ACCESS_SEC'
+
 tN = t8.ACCESS_SEC
 
+FqJB6iRNVYdEGpwb
+
 tR = t8[H + "d"]
+
 H = S.z(tn, tn)(98, 16)
+
 S.z = functio(a,b) {return a || b}
+
 n(98,16)
+
 'sessionI'
+
 tR = t8['sessionId']
 
 3. w = rg(T, N)
+
 ts = rm(tB, g)
+
 tB = t8[tn.call(9, 48, 9)]
+
 tB = t8.ACCESS_SEC
-FqJB6iRNVYdEGpwb
 
 g = t8[S.X(tn, (tn(), 27), (tn(), 41))]
+
 g = t8[tn(27,41) = t8.secretKey
+
 FNW8NwwxZBD3Dagg4V6FIu3Oc2SCmhWgMjILaT1lE9Y=
 
-ts = T
+rm(tB,g)
+'e42318c6b13e57fc'
+
+ts =  T
+
 w = rg(ts, N)
 
+N = n6(l, 501)
+r = l
 
+function n6(t, r) {
+            function e(t, r) {return (nV || nV)(t, r - -7)}
+            return nD[e.call(4, 91, 20)](this, 17)[e.apply(9, [2, 10])](this, arguments)
+}
+
+e.call(4,91,20) = 'bind', e.apply(9, [2, 10]) = 'apply'
 
 4. tC = h
+
 h = b[tn.call(6, 38, 26)]
-b = r 
+
+r = b 
+
 h = b.GatherCost // 0 if b.gatherCost undefined
 
-6. p = nK(F)[(tn(), tn)(1, 33)]()
-
-
-
-
-
+5. p = nK(F)[(tn(), tn)(1, 33)]()
