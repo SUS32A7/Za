@@ -1036,9 +1036,14 @@ FNW8NwwxZBD3Dagg4V6FIu3Oc2SCmhWgMjILaT1lE9Y=
 ts = T
 w = rg(ts, N)
 
-N = n6(l, 501)
+
 
 4. tC = h
+h = b[tn.call(6, 38, 26)]
+b = r 
+h = b.GatherCost // 0 if b.gatherCost undefined
+
+6. p = nK(F)[(tn(), tn)(1, 33)]()
 
 
 
