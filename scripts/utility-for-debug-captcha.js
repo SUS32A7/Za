@@ -1,4 +1,5 @@
-        (function() {
+// Script 1
+(function() {
           const TARGET_STATIC_PATH = "3.25.0/pe.059.f123b6c8830e46be";
         
           function patchResponse(text) {
@@ -60,3 +61,92 @@
           console.log("[Patcher] fetch + XHR response interceptor active.");
         })();  
   
+
+
+// Script 2
+
+(function() {
+    const pattern = /feilin[^/]*\.js$/i; // Matches any filename starting with "feilin" and ending with ".js"
+
+    // 1. BLOCK <script src="..."> tags (overrides the src setter)
+    const scriptProto = HTMLScriptElement.prototype;
+    const originalSrcSetter = Object.getOwnPropertyDescriptor(scriptProto, 'src')?.set;
+    if (originalSrcSetter) {
+        Object.defineProperty(scriptProto, 'src', {
+            set: function(url) {
+                const filename = typeof url === 'string' ? url.split('/').pop().split('?')[0] : '';
+                if (filename && pattern.test(filename)) {
+                    console.log(`[Blocked] Script tag src: ${url}`);
+                    return; // Drops the request silently
+                }
+                originalSrcSetter.call(this, url);
+            },
+            get: function() { return this.getAttribute('src'); },
+            configurable: true,
+            enumerable: true
+        });
+    }
+
+    // 2. BLOCK fetch() and dynamic import()
+    const origFetch = window.fetch;
+    window.fetch = function(...args) {
+        let url = args[0];
+        if (typeof url === 'string') {
+            const filename = url.split('/').pop().split('?')[0];
+            if (pattern.test(filename)) {
+                console.log(`[Blocked] Fetch/Import: ${url}`);
+                return Promise.reject(new Error('Request blocked by interceptor'));
+            }
+        }
+        return origFetch.call(this, ...args);
+    };
+
+    // 3. BLOCK XMLHttpRequest
+    const origOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+        if (typeof url === 'string') {
+            const filename = url.split('/').pop().split('?')[0];
+            if (pattern.test(filename)) {
+                console.log(`[Blocked] XHR: ${url}`);
+                this._blocked = true;
+            }
+        }
+        return origOpen.call(this, method, url, ...rest);
+    };
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function(...args) {
+        if (this._blocked) {
+            this.abort();
+            // Dispatch an error so the website's error handlers are triggered
+            this.dispatchEvent(new Event('error', { bubbles: false, cancelable: true }));
+            return;
+        }
+        return origSend.call(this, ...args);
+    };
+
+    console.log('✅ Network interceptor active. Blocking "feilin*.js" files.');
+})();
+
+
+
+// Script 3
+// Hook JSEncrypt to capture the RSA Key and Plaintext Fingerprint
+    const origSetPublicKey = window.JSEncrypt && window.JSEncrypt.prototype.setPublicKey;
+    const origEncrypt = window.JSEncrypt && window.JSEncrypt.prototype.encrypt;
+
+    if (origSetPublicKey) {
+        window.JSEncrypt.prototype.setPublicKey = function(key) {
+            console.log('%c[RSA Hook] Public Key Captured!', 'color: #fff; background: #28a745; font-size: 14px; padding: 2px 4px;');
+            console.log(key);
+            return origSetPublicKey.apply(this, arguments);
+        };
+    }
+
+    if (origEncrypt) {
+        window.JSEncrypt.prototype.encrypt = function(data) {
+            console.log('%c[RSA Hook] Fingerprint JSON Intercepted!', 'color: #fff; background: #007acc; font-size: 14px; padding: 2px 4px;');
+            console.log('Fingerprint Data:', data);
+            return origEncrypt.apply(this, arguments);
+        };
+    }
+})();
