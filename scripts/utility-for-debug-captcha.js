@@ -130,23 +130,19 @@
 
 
 // Script 3
-// Hook JSEncrypt to capture the RSA Key and Plaintext Fingerprint
-    const origSetPublicKey = window.JSEncrypt && window.JSEncrypt.prototype.setPublicKey;
-    const origEncrypt = window.JSEncrypt && window.JSEncrypt.prototype.encrypt;
-
-    if (origSetPublicKey) {
-        window.JSEncrypt.prototype.setPublicKey = function(key) {
-            console.log('%c[RSA Hook] Public Key Captured!', 'color: #fff; background: #28a745; font-size: 14px; padding: 2px 4px;');
-            console.log(key);
-            return origSetPublicKey.apply(this, arguments);
-        };
+// Hook Array.prototype.join to catch the deviceToken assembly
+const nativeJoin = Array.prototype.join;
+Array.prototype.join = function(separator) {
+    const result = nativeJoin.call(this, separator);
+    
+    // Check if the result matches the deviceToken structure
+    if (result.includes('SG_WEB_PREID') && separator === '#') {
+        console.log('%c[Hook] deviceToken assembly caught!', 'color: #fff; background: #007acc; font-size: 14px; padding: 2px 4px;');
+        console.log('Separator:', separator);
+        console.table(this); // Displays the 5 parts cleanly
+        console.trace('Callstack for deviceToken generation:');
+        debugger; // Pause execution
     }
-
-    if (origEncrypt) {
-        window.JSEncrypt.prototype.encrypt = function(data) {
-            console.log('%c[RSA Hook] Fingerprint JSON Intercepted!', 'color: #fff; background: #007acc; font-size: 14px; padding: 2px 4px;');
-            console.log('Fingerprint Data:', data);
-            return origEncrypt.apply(this, arguments);
-        };
-    }
-})();
+    
+    return result;
+};
