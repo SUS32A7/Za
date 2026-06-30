@@ -24,25 +24,22 @@
 #include <mutex>
 #include <atomic>
 #include <csignal>
+#include <fstream>
 
-// Cross-platform socket headers
+// Cross-platform named pipe headers
 #ifdef _WIN32
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    #pragma comment(lib, "ws2_32.lib")
-    typedef int socklen_t;
-    #define CLOSE_SOCKET closesocket
-    #define SOCKET_INVALID INVALID_SOCKET
-    typedef SOCKET SocketType;
+    #include <windows.h>
+    typedef HANDLE PipeHandle;
+    #define PIPE_INVALID INVALID_HANDLE_VALUE
 #else
-    #include <sys/socket.h>
-    #include <netinet/in.h>
-    #include <arpa/inet.h>
+    #include <sys/stat.h>
+    #include <sys/types.h>
+    #include <fcntl.h>
     #include <unistd.h>
     #include <errno.h>
-    typedef int SocketType;
-    #define CLOSE_SOCKET close
-    #define SOCKET_INVALID (-1)
+    #include <cstdio>
+    typedef int PipeHandle;
+    #define PIPE_INVALID (-1)
 #endif
 
 using json = nlohmann::json;
@@ -53,17 +50,19 @@ using json = nlohmann::json;
 static const std::string ACCESS_KEY  = "LTAI5tSEBwYMwVKAQGpxmvTd";
 static const std::string SECRET_KEY  = "YSKfst7GaVkXwZYvVihJsKF9r89koz";
 static const std::string SCENE_ID    = "didk33e0";
-static const std::string DB_PATH     = "tokens.sqlite";
-static const int  TCP_PORT           = 8765;
+static std::string       DB_PATH     = "tokens.sqlite";
+static const std::string PIPE_NAME   = "captcha_pipe";
 static const int  MAX_TOKEN_RETRIES  = 20;
 
 static std::atomic<bool> g_running{true};
 static std::mutex        g_db_mutex;
+static std::atomic<bool> g_verbose{false};
 
 // ============================================================================
-// Error-only logging — silent otherwise
+// Error-only logging — silent unless --verbose is passed
 // ============================================================================
 static void log_error(const std::string& msg) {
+    if (!g_verbose) return;
     auto now   = std::chrono::system_clock::now();
     auto now_t = std::chrono::system_clock::to_time_t(now);
     std::tm tm_utc{};
@@ -249,20 +248,32 @@ std::string http_post(const std::string& url,
 // ============================================================================
 bool get_next_token(std::string& token) {
     std::lock_guard<std::mutex> lk(g_db_mutex);
+
+    {
+        std::ifstream probe(DB_PATH, std::ios::binary);
+        if (!probe.good()) {
+            log_error("Database file not found: " + DB_PATH);
+            return false;
+        }
+    }
+
     sqlite3* db = nullptr;
     if (sqlite3_open(DB_PATH.c_str(), &db) != SQLITE_OK) {
-        log_error(std::string("Cannot open DB: ") + sqlite3_errmsg(db));
+        log_error("Cannot open DB '" + DB_PATH + "': " +
+                   (db ? sqlite3_errmsg(db) : "unknown error"));
         sqlite3_close(db);
         return false;
     }
     sqlite3_stmt* stmt = nullptr;
     bool found = false;
     if (sqlite3_prepare_v2(db, "SELECT token FROM tokens ORDER BY id LIMIT 1;",
-                           -1, &stmt, nullptr) == SQLITE_OK) {
-        if (sqlite3_step(stmt) == SQLITE_ROW) {
-            const unsigned char* t = sqlite3_column_text(stmt, 0);
-            if (t) { token = reinterpret_cast<const char*>(t); found = true; }
-        }
+                           -1, &stmt, nullptr) != SQLITE_OK) {
+        log_error("Failed to prepare token SELECT: " + std::string(sqlite3_errmsg(db)));
+    } else if (sqlite3_step(stmt) == SQLITE_ROW) {
+        const unsigned char* t = sqlite3_column_text(stmt, 0);
+        if (t) { token = reinterpret_cast<const char*>(t); found = true; }
+    } else {
+        log_error("No device tokens available in table 'tokens'");
     }
     sqlite3_finalize(stmt);
     sqlite3_close(db);
@@ -273,14 +284,20 @@ void remove_token(const std::string& token) {
     std::lock_guard<std::mutex> lk(g_db_mutex);
     sqlite3* db = nullptr;
     if (sqlite3_open(DB_PATH.c_str(), &db) != SQLITE_OK) {
+        log_error("Cannot open DB '" + DB_PATH + "' to remove token: " +
+                   (db ? sqlite3_errmsg(db) : "unknown error"));
         sqlite3_close(db);
         return;
     }
     sqlite3_stmt* stmt = nullptr;
     if (sqlite3_prepare_v2(db, "DELETE FROM tokens WHERE token = ?;",
-                           -1, &stmt, nullptr) == SQLITE_OK) {
+                           -1, &stmt, nullptr) != SQLITE_OK) {
+        log_error("Failed to prepare token DELETE: " + std::string(sqlite3_errmsg(db)));
+    } else {
         sqlite3_bind_text(stmt, 1, token.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_step(stmt);
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            log_error("Failed to delete consumed token: " + std::string(sqlite3_errmsg(db)));
+        }
     }
     sqlite3_finalize(stmt);
     sqlite3_close(db);
@@ -526,7 +543,14 @@ std::string verify_captcha(const std::string& access_key,
                 };
                 return base64_encode(fp.dump());
             }
+            log_error("VerifyCaptchaV3 succeeded but securityToken/certifyId empty for deviceToken="
+                      + device_token);
+        } else {
+            log_error("deviceToken failed verification (VerifyResult=false): " + device_token);
         }
+    } else {
+        log_error("VerifyCaptchaV3 request unsuccessful for deviceToken=" + device_token
+                   + " response=" + response);
     }
     return "";
 }
@@ -538,9 +562,12 @@ std::string compute_final_payload() {
     for (int attempt = 0; attempt < MAX_TOKEN_RETRIES; ++attempt) {
         std::string device_token;
         if (!get_next_token(device_token)) {
-            log_error("No device tokens remaining in database");
+            log_error("No device tokens remaining in database (attempt "
+                      + std::to_string(attempt + 1) + "/" + std::to_string(MAX_TOKEN_RETRIES) + ")");
             return "";
         }
+        log_error("Attempt " + std::to_string(attempt + 1) + "/" + std::to_string(MAX_TOKEN_RETRIES)
+                  + " using deviceToken=" + device_token);
         try {
             std::string certify_id = init_captcha(ACCESS_KEY, SECRET_KEY, SCENE_ID);
             std::string arg_value  = generate_arg(certify_id);
@@ -571,112 +598,178 @@ std::string compute_final_payload() {
                                                   certify_id, final_val, device_token);
             if (!payload.empty()) return payload;
             // Token didn't work — retry with next
+            log_error("deviceToken=" + device_token + " produced empty payload, retrying");
         } catch (const std::exception& e) {
-            log_error("Attempt " + std::to_string(attempt + 1) + " failed: " + e.what());
+            log_error("Attempt " + std::to_string(attempt + 1) + " failed for deviceToken="
+                      + device_token + ": " + e.what());
             remove_token(device_token);
         }
     }
-    log_error("All token retries exhausted");
+    log_error("All " + std::to_string(MAX_TOKEN_RETRIES) + " token retries exhausted");
     return "";
 }
-
-// ============================================================================
-// Cross-platform socket init
-// ============================================================================
-struct SocketInit {
-    SocketInit() {
-#ifdef _WIN32
-        WSADATA d; WSAStartup(MAKEWORD(2, 2), &d);
-#endif
-    }
-    ~SocketInit() {
-#ifdef _WIN32
-        WSACleanup();
-#endif
-    }
-};
 
 // ============================================================================
 // Signal handler
 // ============================================================================
 static void signal_handler(int) { g_running = false; }
 
+#ifdef _WIN32
 // ============================================================================
-// TCP server — computes payload only when a client connects
+// Named pipe server (Windows) — computes payload only when a client connects
 // ============================================================================
 void run_server() {
-    SocketInit sock_init;
-
-#ifndef _WIN32
-    signal(SIGPIPE, SIG_IGN);
-#endif
     std::signal(SIGINT,  signal_handler);
     std::signal(SIGTERM, signal_handler);
 
-    SocketType srv = socket(AF_INET, SOCK_STREAM, 0);
-    if (srv == SOCKET_INVALID) { log_error("socket() failed"); return; }
-
-    int opt = 1;
-#ifdef _WIN32
-    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
-#else
-    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-#endif
-
-    // 1-second accept timeout so we can poll g_running
-    struct timeval tv; tv.tv_sec = 1; tv.tv_usec = 0;
-#ifdef _WIN32
-    setsockopt(srv, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
-#else
-    setsockopt(srv, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-#endif
-
-    struct sockaddr_in addr{};
-    addr.sin_family      = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port        = htons(TCP_PORT);
-
-    if (bind(srv, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        log_error("bind() failed on port " + std::to_string(TCP_PORT));
-        CLOSE_SOCKET(srv);
-        return;
-    }
-    if (listen(srv, 5) < 0) {
-        log_error("listen() failed");
-        CLOSE_SOCKET(srv);
-        return;
-    }
+    std::string pipe_path = "\\\\.\\pipe\\" + PIPE_NAME;
 
     while (g_running) {
-        struct sockaddr_in cli;
-        socklen_t clilen = sizeof(cli);
-        SocketType cfd = accept(srv, (struct sockaddr*)&cli, &clilen);
-        if (cfd == SOCKET_INVALID) continue;  // timeout or interrupted
+        HANDLE pipe = CreateNamedPipeA(
+            pipe_path.c_str(),
+            PIPE_ACCESS_OUTBOUND,
+            PIPE_TYPE_BYTE | PIPE_WAIT,
+            PIPE_UNLIMITED_INSTANCES,
+            4096, 4096,
+            0,
+            nullptr);
+
+        if (pipe == INVALID_HANDLE_VALUE) {
+            log_error("CreateNamedPipe failed on '" + pipe_path + "', error=" +
+                       std::to_string(GetLastError()));
+            Sleep(1000);
+            continue;
+        }
+
+        // ConnectNamedPipe blocks; we poll g_running by using overlapped-free
+        // blocking connect and relying on process signals to break out.
+        BOOL connected = ConnectNamedPipe(pipe, nullptr) ?
+            TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
+
+        if (!g_running) { CloseHandle(pipe); break; }
+
+        if (!connected) {
+            log_error("ConnectNamedPipe failed, error=" + std::to_string(GetLastError()));
+            CloseHandle(pipe);
+            continue;
+        }
 
         // Compute payload only when asked
         std::string payload = compute_final_payload();
         std::string response = payload.empty() ? "ERROR" : payload;
         response += "\n";
 
-        // Send timeout on client socket
-        struct timeval stv; stv.tv_sec = 10; stv.tv_usec = 0;
-#ifdef _WIN32
-        setsockopt(cfd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&stv, sizeof(stv));
-#else
-        setsockopt(cfd, SOL_SOCKET, SO_SNDTIMEO, &stv, sizeof(stv));
-#endif
+        DWORD written = 0;
+        if (!WriteFile(pipe, response.c_str(), (DWORD)response.size(), &written, nullptr)) {
+            log_error("WriteFile to named pipe failed, error=" + std::to_string(GetLastError()));
+        }
 
-        send(cfd, response.c_str(), (int)response.size(), 0);
-        CLOSE_SOCKET(cfd);
+        FlushFileBuffers(pipe);
+        DisconnectNamedPipe(pipe);
+        CloseHandle(pipe);
+    }
+}
+#else
+// ============================================================================
+// Named pipe server (POSIX FIFO) — computes payload only when a client connects
+// ============================================================================
+void run_server() {
+    signal(SIGPIPE, SIG_IGN);
+    std::signal(SIGINT,  signal_handler);
+    std::signal(SIGTERM, signal_handler);
+
+    std::string pipe_path = "/tmp/" + PIPE_NAME;
+
+    // Remove any stale FIFO from a previous run, then create fresh
+    unlink(pipe_path.c_str());
+    if (mkfifo(pipe_path.c_str(), 0666) != 0 && errno != EEXIST) {
+        log_error("mkfifo failed on '" + pipe_path + "': " + std::strerror(errno));
+        return;
     }
 
-    CLOSE_SOCKET(srv);
+    while (g_running) {
+        // Open for read+write (O_RDWR) so open() doesn't block waiting for a
+        // writer; this also lets us poll g_running between client opens.
+        int fd = open(pipe_path.c_str(), O_RDONLY | O_NONBLOCK);
+        if (fd < 0) {
+            if (errno != EINTR) {
+                log_error("open() on FIFO '" + pipe_path + "' failed: " + std::strerror(errno));
+            }
+            usleep(200000);
+            continue;
+        }
+
+        // Switch to blocking mode to detect an actual writer connecting
+        int flags = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+
+        char probe;
+        ssize_t n = read(fd, &probe, 1); // blocks until a client writes or closes
+        close(fd);
+
+        if (n <= 0) continue; // no real client connected, loop and re-check g_running
+
+        // Compute payload only when asked
+        std::string payload = compute_final_payload();
+        std::string response = payload.empty() ? "ERROR" : payload;
+        response += "\n";
+
+        int wfd = open(pipe_path.c_str(), O_WRONLY | O_NONBLOCK);
+        if (wfd < 0) {
+            log_error("Failed to open FIFO '" + pipe_path + "' for write: " + std::strerror(errno));
+            continue;
+        }
+        ssize_t written = write(wfd, response.c_str(), response.size());
+        if (written < 0 || static_cast<size_t>(written) != response.size()) {
+            log_error("write() to FIFO failed or incomplete: " + std::string(std::strerror(errno)));
+        }
+        close(wfd);
+    }
+
+    unlink(pipe_path.c_str());
+}
+#endif
+
+// ============================================================================
+// Argument parsing
+// ============================================================================
+static void print_usage(const char* prog) {
+    std::cerr << "Usage: " << prog << " [--db-path /path/to/tokens.sqlite] [--verbose]\n";
+}
+
+static bool parse_args(int argc, char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--db-path") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --db-path requires a value\n";
+                return false;
+            }
+            DB_PATH = argv[++i];
+        } else if (arg.rfind("--db-path=", 0) == 0) {
+            DB_PATH = arg.substr(std::string("--db-path=").size());
+        } else if (arg == "--verbose") {
+            g_verbose = true;
+        } else if (arg == "-h" || arg == "--help") {
+            print_usage(argv[0]);
+            return false;
+        } else {
+            std::cerr << "Unknown argument: " << arg << "\n";
+            print_usage(argv[0]);
+            return false;
+        }
+    }
+    return true;
 }
 
 // ============================================================================
-// Main — silent background server
+// Main — silent background server (errors logged only with --verbose)
 // ============================================================================
-int main() {
+int main(int argc, char** argv) {
+    if (!parse_args(argc, argv)) {
+        return 1;
+    }
+    log_error("Starting with db-path='" + DB_PATH + "' verbose=true");
     curl_global_init(CURL_GLOBAL_ALL);
     run_server();
     curl_global_cleanup();
