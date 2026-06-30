@@ -1,16 +1,19 @@
 cmake_minimum_required(VERSION 3.14)
 project(CoreVerCap3)
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
 include(FetchContent)
-
+# ── Static linking (single statically linked binary) ──────────────────────
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+else()
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
+endif()
 # ── Threads (pthread on Linux/macOS) ──────────────────────────────────────
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
 # ── nlohmann/json ─────────────────────────────────────────────────────────
 FetchContent_Declare(
     nlohmann_json
@@ -18,7 +21,6 @@ FetchContent_Declare(
     GIT_TAG        v3.11.3
 )
 FetchContent_MakeAvailable(nlohmann_json)
-
 # ── ZLIB (Auto-downloaded) ────────────────────────────────────────────────
 set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
@@ -27,11 +29,9 @@ FetchContent_Declare(
     GIT_TAG        v1.3.1
 )
 FetchContent_MakeAvailable(zlib)
-
 # ── SQLite3 amalgamation (self-contained, no system dependency) ───────────
 set(SQLITE3_URL "https://www.sqlite.org/2024/sqlite-amalgamation-3460100.zip")
 set(SQLITE3_DIR "${CMAKE_BINARY_DIR}/sqlite3-src")
-
 if(NOT EXISTS "${SQLITE3_DIR}/sqlite3.c")
     message(STATUS "Downloading SQLite3 amalgamation...")
     file(DOWNLOAD ${SQLITE3_URL}
@@ -45,28 +45,25 @@ if(NOT EXISTS "${SQLITE3_DIR}/sqlite3.c")
          DESTINATION "${SQLITE3_DIR}")
     file(REMOVE "${CMAKE_BINARY_DIR}/sqlite3.zip")
 endif()
-
 file(GLOB SQLITE3_SUBDIR "${SQLITE3_DIR}/sqlite-amalgamation-*")
 if(NOT SQLITE3_SUBDIR)
     message(FATAL_ERROR "SQLite3 amalgamation directory not found")
 endif()
-
 add_library(sqlite3 STATIC "${SQLITE3_SUBDIR}/sqlite3.c")
 target_include_directories(sqlite3 PUBLIC "${SQLITE3_SUBDIR}")
 if(UNIX)
     target_link_libraries(sqlite3 PUBLIC dl)
 endif()
-
-# ── System libraries: curl, openssl (Require system packages) ─────────────
+# ── System libraries: curl, openssl (prefer static .a over shared .so) ────
+if(UNIX AND NOT APPLE)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+endif()
 find_package(CURL REQUIRED)
 find_package(OpenSSL REQUIRED)
-
 # ── Main executable ───────────────────────────────────────────────────────
 add_executable(main main.cpp)
-
 # Expose the fetched ZLIB headers to main.cpp
 target_include_directories(main PRIVATE ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
-
 target_link_libraries(main
     nlohmann_json::nlohmann_json
     sqlite3
@@ -76,8 +73,12 @@ target_link_libraries(main
     zlibstatic          # The statically built target from FetchContent
     Threads::Threads
 )
-
-# Windows needs ws2_32 for Winsock
+# Windows needs ws2_32 for Winsock; both platforms may need extra libs
+# pulled in transitively by a static libcurl/OpenSSL (crypt32/bcrypt on
+# Windows for schannel/openssl, ldap/idn2/etc. on Linux depending on how
+# the system curl/openssl were built statically).
 if(WIN32)
-    target_link_libraries(main ws2_32)
+    target_link_libraries(main ws2_32 crypt32 bcrypt)
+else()
+    target_link_libraries(main dl)
 endif()
