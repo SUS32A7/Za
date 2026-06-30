@@ -4,6 +4,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 include(FetchContent)
+
 # ── Static linking (single statically linked binary) ──────────────────────
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 if(MSVC)
@@ -11,9 +12,11 @@ if(MSVC)
 else()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
 endif()
+
 # ── Threads (pthread on Linux/macOS) ──────────────────────────────────────
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
+
 # ── nlohmann/json ─────────────────────────────────────────────────────────
 FetchContent_Declare(
     nlohmann_json
@@ -21,6 +24,7 @@ FetchContent_Declare(
     GIT_TAG        v3.11.3
 )
 FetchContent_MakeAvailable(nlohmann_json)
+
 # ── ZLIB (Auto-downloaded) ────────────────────────────────────────────────
 set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
@@ -29,6 +33,7 @@ FetchContent_Declare(
     GIT_TAG        v1.3.1
 )
 FetchContent_MakeAvailable(zlib)
+
 # ── SQLite3 amalgamation (self-contained, no system dependency) ───────────
 set(SQLITE3_DIR "${CMAKE_BINARY_DIR}/sqlite3-src")
 if(NOT DEFINED SQLITE3_URL)
@@ -56,15 +61,17 @@ target_include_directories(sqlite3 PUBLIC "${SQLITE3_SUBDIR}")
 if(UNIX)
     target_link_libraries(sqlite3 PUBLIC dl)
 endif()
-# ── System libraries: curl, openssl (statically linked) ───────────────────
-# A statically-built system libcurl pulls in a chain of transitive static
-# deps (nghttp2, libssh, OpenLDAP, Kerberos/GSSAPI, librtmp, libpsl, zstd,
-# brotli, etc.) that find_package(CURL) does NOT resolve — it only links
-# libcurl.a itself, leaving those symbols undefined at link time. pkg-config
-# --static is what correctly expands the full dependency closure, so it is
-# used here instead on Unix. Requires `pkg-config` and the matching -dev
-# packages (libcurl4-openssl-dev pulls these in via build-deps) to be
-# installed on the build machine.
+
+# ── curl + TLS ──────────────────────────────────────────────────────────────
+# Linux:   use system libcurl/openssl via pkg-config --static (full static
+#          link), except Kerberos/GSSAPI which Ubuntu only ships as .so —
+#          those four libs are linked dynamically, everything else stays
+#          static.
+# Windows: no system curl exists on CI runners and find_package(CURL) fails
+#          there, so curl is built from source via FetchContent instead,
+#          using Schannel (Windows' built-in TLS) so OpenSSL isn't even
+#          needed on this platform.
+# macOS:   use system find_package() as before (untouched).
 if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(CURL_STATIC REQUIRED IMPORTED_TARGET libcurl)
@@ -76,10 +83,30 @@ if(UNIX AND NOT APPLE)
     # Strip those specific flags from the static link line; they're added
     # back below as an explicit dynamic link instead.
     list(FILTER CURL_STATIC_STATIC_LDFLAGS EXCLUDE REGEX "gssapi_krb5|krb5|k5crypto|com_err|gssrpc|kdb5")
+elseif(WIN32)
+    set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+    set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+    set(USE_NGHTTP2 OFF CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_LDAPS ON CACHE BOOL "" FORCE)
+    set(CURL_ZLIB ON CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_TESTS ON CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        curl
+        GIT_REPOSITORY https://github.com/curl/curl.git
+        GIT_TAG        curl-8_10_1
+    )
+    FetchContent_MakeAvailable(curl)
 else()
     find_package(CURL REQUIRED)
     find_package(OpenSSL REQUIRED)
 endif()
+
 # ── Main executable ───────────────────────────────────────────────────────
 add_executable(main main.cpp)
 # Expose the fetched ZLIB headers to main.cpp
@@ -90,6 +117,7 @@ target_link_libraries(main
     zlibstatic          # The statically built target from FetchContent
     Threads::Threads
 )
+
 if(UNIX AND NOT APPLE)
     # pkg-config's --static output already includes every transitive static
     # dependency curl/openssl need (nghttp2, ssh, ldap, rtmp, psl, zstd,
@@ -108,11 +136,11 @@ if(UNIX AND NOT APPLE)
         com_err
         -Wl,-Bstatic
     )
+elseif(WIN32)
+    # FetchContent-built curl, statically linked, using Schannel for TLS —
+    # no OpenSSL link needed on this platform.
+    target_link_libraries(main libcurl)
+    target_link_libraries(main ws2_32 crypt32 bcrypt)
 else()
     target_link_libraries(main CURL::libcurl OpenSSL::SSL OpenSSL::Crypto)
-endif()
-# Windows needs ws2_32/crypt32/bcrypt for Winsock and TLS/crypto support
-# pulled in transitively by a static libcurl/OpenSSL.
-if(WIN32)
-    target_link_libraries(main ws2_32 crypt32 bcrypt)
 endif()
