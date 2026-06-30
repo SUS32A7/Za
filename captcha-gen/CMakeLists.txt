@@ -62,30 +62,44 @@ if(UNIX)
     target_link_libraries(sqlite3 PUBLIC dl)
 endif()
 
-# ── curl + TLS ──────────────────────────────────────────────────────────────
-# Linux:   use system libcurl/openssl via pkg-config --static (full static
-#          link), except Kerberos/GSSAPI which Ubuntu only ships as .so —
-#          those four libs are linked dynamically, everything else stays
-#          static.
-# Windows: no system curl exists on CI runners and find_package(CURL) fails
-#          there, so curl is built from source via FetchContent instead,
-#          using Schannel (Windows' built-in TLS) so OpenSSL isn't even
-#          needed on this platform.
-# macOS:   use system find_package() as before (untouched).
+# ── curl + OpenSSL (statically linked, GSSAPI/Kerberos disabled) ──────────
+# System libcurl on Ubuntu is built with GSSAPI support, and pkg-config
+# --static then demands -lgssapi_krb5/-lkrb5/-lk5crypto — but Ubuntu only
+# ships those as .so, never as .a, so a fully static link against system
+# curl is impossible without compiling MIT krb5 from source yourself.
+# Instead of depending on system curl at all, curl is built from source
+# here via FetchContent with GSSAPI explicitly OFF, so the missing-symbol
+# problem never arises and the resulting binary stays 100% statically
+# linked. OpenSSL is still taken from the system (libssl-dev), since
+# building OpenSSL from source is its own can of worms and Ubuntu DOES
+# ship libssl.a/libcrypto.a statically.
 if(UNIX AND NOT APPLE)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(CURL_STATIC REQUIRED IMPORTED_TARGET libcurl)
-    pkg_check_modules(OPENSSL_STATIC REQUIRED IMPORTED_TARGET openssl)
+    find_package(OpenSSL REQUIRED)
 
-    # Ubuntu/Debian never ship static (.a) builds of Kerberos/GSSAPI
-    # libraries — only shared (.so) ones — even though the system libcurl
-    # was built with GSSAPI support and pkg-config --static asks for them.
-    # Strip those specific flags from the static link line; they're added
-    # back below as an explicit dynamic link instead.
-    list(FILTER CURL_STATIC_STATIC_LDFLAGS EXCLUDE REGEX "gssapi_krb5|krb5|k5crypto|com_err|gssrpc|kdb5")
+    set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_OPENSSL ON CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+    set(USE_NGHTTP2 OFF CACHE BOOL "" FORCE)
+    set(CURL_USE_GSSAPI OFF CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_LDAPS ON CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_RTSP ON CACHE BOOL "" FORCE)
+    set(USE_LIBRTMP OFF CACHE BOOL "" FORCE)
+    set(CURL_ZLIB ON CACHE BOOL "" FORCE)
+    set(ENABLE_UNIX_SOCKETS OFF CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_TESTS ON CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        curl
+        GIT_REPOSITORY https://github.com/curl/curl.git
+        GIT_TAG        curl-8_10_1
+    )
+    FetchContent_MakeAvailable(curl)
 elseif(WIN32)
     set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+    set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)   # Windows native TLS — no OpenSSL needed
     set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
     set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
     set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
@@ -119,28 +133,9 @@ target_link_libraries(main
 )
 
 if(UNIX AND NOT APPLE)
-    # pkg-config's --static output already includes every transitive static
-    # dependency curl/openssl need (nghttp2, ssh, ldap, rtmp, psl, zstd,
-    # brotli, etc.) in the correct link order. Kerberos/GSSAPI was filtered
-    # out above since no static archive exists on Ubuntu — it's linked
-    # dynamically here instead, the only non-static part of the binary.
-    target_compile_options(main PRIVATE ${CURL_STATIC_CFLAGS} ${OPENSSL_STATIC_CFLAGS})
-    target_link_libraries(main
-        ${CURL_STATIC_STATIC_LDFLAGS}
-        ${OPENSSL_STATIC_STATIC_LDFLAGS}
-        dl
-        -Wl,-Bdynamic
-        gssapi_krb5
-        krb5
-        k5crypto
-        com_err
-        -Wl,-Bstatic
-    )
+    target_link_libraries(main libcurl OpenSSL::SSL OpenSSL::Crypto dl)
 elseif(WIN32)
-    # FetchContent-built curl, statically linked, using Schannel for TLS —
-    # no OpenSSL link needed on this platform.
-    target_link_libraries(main libcurl)
-    target_link_libraries(main ws2_32 crypt32 bcrypt)
+    target_link_libraries(main libcurl ws2_32 crypt32 bcrypt)
 else()
     target_link_libraries(main CURL::libcurl OpenSSL::SSL OpenSSL::Crypto)
 endif()
