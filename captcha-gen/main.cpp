@@ -7,7 +7,7 @@
 #include <nlohmann/json.hpp>
 #include <zlib.h>
 #include <sqlite3.h>
-
+#include <iostream>
 #include <algorithm>
 #include <cstdint>
 #include <chrono>
