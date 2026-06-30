@@ -54,12 +54,23 @@ target_include_directories(sqlite3 PUBLIC "${SQLITE3_SUBDIR}")
 if(UNIX)
     target_link_libraries(sqlite3 PUBLIC dl)
 endif()
-# ── System libraries: curl, openssl (prefer static .a over shared .so) ────
+# ── System libraries: curl, openssl (statically linked) ───────────────────
+# A statically-built system libcurl pulls in a chain of transitive static
+# deps (nghttp2, libssh, OpenLDAP, Kerberos/GSSAPI, librtmp, libpsl, zstd,
+# brotli, etc.) that find_package(CURL) does NOT resolve — it only links
+# libcurl.a itself, leaving those symbols undefined at link time. pkg-config
+# --static is what correctly expands the full dependency closure, so it is
+# used here instead on Unix. Requires `pkg-config` and the matching -dev
+# packages (libcurl4-openssl-dev pulls these in via build-deps) to be
+# installed on the build machine.
 if(UNIX AND NOT APPLE)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(CURL_STATIC REQUIRED IMPORTED_TARGET libcurl)
+    pkg_check_modules(OPENSSL_STATIC REQUIRED IMPORTED_TARGET openssl)
+else()
+    find_package(CURL REQUIRED)
+    find_package(OpenSSL REQUIRED)
 endif()
-find_package(CURL REQUIRED)
-find_package(OpenSSL REQUIRED)
 # ── Main executable ───────────────────────────────────────────────────────
 add_executable(main main.cpp)
 # Expose the fetched ZLIB headers to main.cpp
@@ -67,18 +78,20 @@ target_include_directories(main PRIVATE ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
 target_link_libraries(main
     nlohmann_json::nlohmann_json
     sqlite3
-    CURL::libcurl
-    OpenSSL::SSL
-    OpenSSL::Crypto
     zlibstatic          # The statically built target from FetchContent
     Threads::Threads
 )
-# Windows needs ws2_32 for Winsock; both platforms may need extra libs
-# pulled in transitively by a static libcurl/OpenSSL (crypt32/bcrypt on
-# Windows for schannel/openssl, ldap/idn2/etc. on Linux depending on how
-# the system curl/openssl were built statically).
+if(UNIX AND NOT APPLE)
+    # pkg-config's --static output already includes every transitive static
+    # dependency curl/openssl need (nghttp2, ssh, ldap, krb5, rtmp, psl,
+    # zstd, brotli, etc.) in the correct link order.
+    target_compile_options(main PRIVATE ${CURL_STATIC_CFLAGS} ${OPENSSL_STATIC_CFLAGS})
+    target_link_libraries(main ${CURL_STATIC_STATIC_LDFLAGS} ${OPENSSL_STATIC_STATIC_LDFLAGS} dl)
+else()
+    target_link_libraries(main CURL::libcurl OpenSSL::SSL OpenSSL::Crypto)
+endif()
+# Windows needs ws2_32/crypt32/bcrypt for Winsock and TLS/crypto support
+# pulled in transitively by a static libcurl/OpenSSL.
 if(WIN32)
     target_link_libraries(main ws2_32 crypt32 bcrypt)
-else()
-    target_link_libraries(main dl)
 endif()
