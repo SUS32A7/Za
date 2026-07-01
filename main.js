@@ -156,41 +156,44 @@ if (!_isWin) {
 
 function getCaptchaVerifyParam() {
   return new Promise((resolve, reject) => {
-    let data = "";
-    let resolved = false;
+    // Open resp for reading first — this open() call blocks (on the libuv
+    // threadpool) until a writer connects on the other end, same as `cat resp`.
+    fs.open(CAPTCHA_RESP_PIPE, fs.constants.O_RDONLY, (err, respFd) => {
+      if (err) return reject(err);
 
-    const finish = (err, val) => {
-      if (resolved) return;
-      resolved = true;
-      if (err) reject(err);
-      else resolve(val);
-    };
+      const cleanupResp = () => fs.close(respFd, () => {});
 
-    // 1. Open the RESPONSE pipe for reading FIRST.
-    // This will asynchronously wait for the external process to write to it.
-    const respStream = fs.createReadStream(CAPTCHA_RESP_PIPE, { encoding: "utf8" });
+      // Now trigger the external process by writing to req.
+      fs.open(CAPTCHA_REQ_PIPE, fs.constants.O_WRONLY, (err, reqFd) => {
+        if (err) { cleanupResp(); return reject(err); }
 
-    respStream.on("error", (err) => finish(err));
-    
-    respStream.on("data", (chunk) => { 
-      data += chunk; 
-    });
-    
-    respStream.on("end", () => {
-      const result = data.trim();
-      if (!result) return finish(new Error("Captcha pipe returned empty response"));
-      finish(null, result);
-    });
+        fs.write(reqFd, "1\n", (err) => {
+          fs.close(reqFd, () => {});
+          if (err) { cleanupResp(); return reject(err); }
 
-    // 2. Open the REQUEST pipe for writing and send the signal.
-    const reqStream = fs.createWriteStream(CAPTCHA_REQ_PIPE);
+          // Read everything until EOF (writer closes its end).
+          const chunks = [];
+          const buf = Buffer.alloc(65536);
 
-    reqStream.on("error", (err) => finish(err));
+          function readLoop() {
+            fs.read(respFd, buf, 0, buf.length, null, (err, bytesRead) => {
+              if (err) { cleanupResp(); return reject(err); }
 
-    reqStream.on("open", () => {
-      // Send the trigger. Using "\n" to mimic your shell `echo ''` exactly.
-      reqStream.write("1\n"); 
-      reqStream.end(); // Close the write pipe to signal the external process
+              if (bytesRead === 0) {
+                cleanupResp();
+                const result = Buffer.concat(chunks).toString("utf8").trim();
+                if (!result) return reject(new Error("Captcha pipe returned empty response"));
+                return resolve(result);
+              }
+
+              chunks.push(Buffer.from(buf.subarray(0, bytesRead)));
+              readLoop();
+            });
+          }
+
+          readLoop();
+        });
+      });
     });
   });
 }
