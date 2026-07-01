@@ -4,6 +4,11 @@ const express = require("express");
 const http = require("http");
 const crypto = require("crypto");
 const config = require("./config");
+const os = require("os");
+const fs = require("fs");
+const fsp = fs.promises;
+const path = require("path");
+const { execSync } = require("child_process");
 
 const app = express();
 const server = http.createServer(app);
@@ -127,6 +132,51 @@ function messagesToPrompt(messages) {
   }
 
   return prompt.trim();
+}
+// ============== CAPTCHA NAMED-PIPE (cross-platform) ==============
+
+const _isWin = process.platform === "win32";
+const _tmpDir = process.env.TEMPDIR || os.tmpdir();
+const CAPTCHA_REQ_PIPE = _isWin
+  ? "\\\\.\\pipe\\captcha_pipe.req"
+  : path.join(_tmpDir, "captcha_pipe.req");
+const CAPTCHA_RESP_PIPE = _isWin
+  ? "\\\\.\\pipe\\captcha_pipe.resp"
+  : path.join(_tmpDir, "captcha_pipe.resp");
+
+// Ensure FIFOs exist on Linux
+if (!_isWin) {
+  for (const p of [CAPTCHA_REQ_PIPE, CAPTCHA_RESP_PIPE]) {
+    if (!fs.existsSync(p)) {
+      try { execSync(`mkfifo -m 666 "${p}"`); } catch (_) {}
+    }
+  }
+}
+
+// Captcha Gen
+async function getCaptchaVerifyParam() {
+  let reqH = null, respH = null;
+  try {
+    // 1. Write trigger to req pipe
+    reqH = await fsp.open(CAPTCHA_REQ_PIPE, "w");
+    await reqH.write("1");
+    await reqH.close();
+    reqH = null;
+
+    // 2. Read base64 response from resp pipe
+    respH = await fsp.open(CAPTCHA_RESP_PIPE, "r");
+    const buf = Buffer.alloc(65536);
+    const { bytesRead } = await respH.read(buf, 0, 65536, 0);
+    await respH.close();
+    respH = null;
+
+    const result = buf.toString("utf8", 0, bytesRead).trim();
+    if (!result) throw new Error("Captcha pipe returned empty response");
+    return result;
+  } finally {
+    if (reqH)  { try { await reqH.close();  } catch (_) {} }
+    if (respH) { try { await respH.close(); } catch (_) {} }
+  }
 }
 
 // ============================================================
@@ -372,6 +422,7 @@ async function* sendToZAI(prompt, options = {}) {
     }
   };
 
+  requestBody.captcha_verify_param = await getCaptchaVerifyParam();
   const body = JSON.stringify(requestBody);
 
   if (config.logging.level === "debug") {
