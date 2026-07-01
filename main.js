@@ -133,27 +133,7 @@ function messagesToPrompt(messages) {
 
   return prompt.trim();
 }
-// ============== CAPTCHA NAMED-PIPE (cross-platform) ==============
 
-const _isWin = process.platform === "win32";
-const _tmpDir = process.env.TEMPDIR || os.tmpdir();
-const CAPTCHA_REQ_PIPE = _isWin
-  ? "\\\\.\\pipe\\captcha_pipe.req"
-  : path.join(_tmpDir, "captcha_pipe.req");
-const CAPTCHA_RESP_PIPE = _isWin
-  ? "\\\\.\\pipe\\captcha_pipe.resp"
-  : path.join(_tmpDir, "captcha_pipe.resp");
-
-// Ensure FIFOs exist on Linux
-if (!_isWin) {
-  for (const p of [CAPTCHA_REQ_PIPE, CAPTCHA_RESP_PIPE]) {
-    if (!fs.existsSync(p)) {
-      try { execSync(`mkfifo -m 666 "${p}"`); } catch (_) {}
-    }
-  }
-}
-
-// Captcha Gen
 // ============== CAPTCHA NAMED-PIPE (cross-platform) ==============
 
 const _isWin = process.platform === "win32";
@@ -197,6 +177,7 @@ function getCaptchaVerifyParam() {
     });
   });
 }
+
 // ============================================================
 // ── FORMAT HELPERS ──────────────────────────────────────────
 // ============================================================
