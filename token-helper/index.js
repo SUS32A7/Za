@@ -6,8 +6,8 @@ import { stdin as input, stdout as output } from 'process';
 import initSqlJs from 'sql.js';
 
 // ---------- Configuration ----------
-const MAX_TOKENS = 5000;
-const DEFAULT_TOKENS = 2500;
+const MAX_TOKENS = 1250;
+const DEFAULT_TOKENS = 750;
 const SEND_WAIT_MS = 7000;       // wait after clicking send
 const MAX_RETRIES = 3;
 const TOKEN_COLLECTION_TIMEOUT_MS = 90000; // 90 seconds
