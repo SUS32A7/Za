@@ -446,8 +446,9 @@ async function* sendToZAI(prompt, options = {}) {
     "Origin": BASE_URL,
     "Referer": `${BASE_URL}/`,
     "Authorization": `Bearer ${session.token}`,
-    "X-Signature": signature,
     "X-FE-Version": session.feVersion,
+    "x-region": "overseas",
+    "X-Signature": signature,
     "Content-Type": "application/json"
   };
 
