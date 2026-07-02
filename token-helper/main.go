@@ -13,7 +13,7 @@ import (
 
     _ "modernc.org/sqlite"
 
-    playwright "github.com/playwright-community/playwright-go"
+    playwright "github.com/mxschmitt/playwright-go"
 )
 
 // ---------- Configuration ----------
@@ -48,7 +48,7 @@ func promptTokenCount() int {
 
 // ---------- Selector wait result ----------
 type selResult struct {
-    loc playwright.Locator
+    loc playwright.ElementHandle
     err error
 }
 
@@ -235,8 +235,10 @@ func main() {
     fmt.Printf("\n🎯 Collecting %d tokens per batch, %d batches total\n", total, conc)
 
     // ---------- Launch Playwright ----------
-    fmt.Println("📦 Installing Playwright browsers (if needed)...")
-    if err := playwright.Install(); err != nil {
+    fmt.Println("📦 Installing Playwright Chromium browser (if needed)...")
+    if err := playwright.Install(&playwright.RunOptions{
+        Browsers: []string{"chromium"},
+    }); err != nil {
         log.Fatalf("Failed to install Playwright: %v", err)
     }
 
