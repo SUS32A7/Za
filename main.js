@@ -138,7 +138,7 @@ function messagesToPrompt(messages) {
 
 const _isWin = process.platform === "win32";
 const _tmpDir = process.env.TEMPDIR || os.tmpdir();
-const CAPTCHA_REQ_PIPE = _isWin
+const CAPTCHA_REQ_PIPE  = _isWin
   ? "\\\\.\\pipe\\captcha_pipe.req"
   : path.join(_tmpDir, "captcha_pipe.req");
 const CAPTCHA_RESP_PIPE = _isWin
@@ -154,50 +154,81 @@ if (!_isWin) {
   }
 }
 
+/**
+ * Mirrors the working shell flow:
+ *   echo '' > /tmp/captcha_pipe.req && sleep 1 && cat /tmp/captcha_pipe.resp
+ *
+ * 1. Write a trigger byte to the REQ pipe (unblocks the external solver
+ *    which is parked on `read(req)`).
+ * 2. Open RESP for reading and stream until the solver closes its write
+ *    end (EOF). The first read may block briefly until the solver opens
+ *    its writer — that's expected and correct.
+ *
+ * The previous implementation opened RESP first, which deadlocked because
+ * the solver never gets to writing RESP until it first receives the REQ
+ * trigger.
+ */
 function getCaptchaVerifyParam() {
   return new Promise((resolve, reject) => {
-    // Open resp for reading first — this open() call blocks (on the libuv
-    // threadpool) until a writer connects on the other end, same as `cat resp`.
-    fs.open(CAPTCHA_RESP_PIPE, fs.constants.O_RDONLY, (err, respFd) => {
-      if (err) return reject(err);
+    const startedAt = Date.now();
+    console.log(`[Captcha] → trigger ${CAPTCHA_REQ_PIPE}`);
 
-      const cleanupResp = () => fs.close(respFd, () => {});
+    const watchdog = setTimeout(() => {
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+      console.error(`[Captcha] ✗ timeout after ${elapsed}s`);
+      reject(new Error(`Captcha pipe timeout after 90s`));
+    }, 90_000);
 
-      // Now trigger the external process by writing to req.
-      fs.open(CAPTCHA_REQ_PIPE, fs.constants.O_WRONLY, (err, reqFd) => {
-        if (err) { cleanupResp(); return reject(err); }
+    // ---- Step 1: write trigger to REQ pipe -----------------------------
+    // fs.writeFile opens (O_WRONLY|O_CREAT|O_TRUNC), writes, closes.
+    // On a FIFO this blocks until a reader (the solver) is connected.
+    fs.writeFile(CAPTCHA_REQ_PIPE, "1\n", (writeErr) => {
+      if (writeErr) {
+        clearTimeout(watchdog);
+        console.error("[Captcha] req write failed:", writeErr.message);
+        return reject(new Error(`Captcha req write failed: ${writeErr.message}`));
+      }
 
-        fs.write(reqFd, "1\n", (err) => {
-          fs.close(reqFd, () => {});
-          if (err) { cleanupResp(); return reject(err); }
+      console.log(`[Captcha] ← awaiting response on ${CAPTCHA_RESP_PIPE}`);
 
-          // Read everything until EOF (writer closes its end).
-          const chunks = [];
-          const buf = Buffer.alloc(65536);
+      // ---- Step 2: stream RESP until EOF (solver closes writer) -------
+      const stream = fs.createReadStream(CAPTCHA_RESP_PIPE, {
+        encoding: "utf8",
+        // No O_NONBLOCK — we *want* to block until the solver opens its
+        // writer end. EOF (bytesRead === 0) signals "solver done".
+      });
 
-          function readLoop() {
-            fs.read(respFd, buf, 0, buf.length, null, (err, bytesRead) => {
-              if (err) { cleanupResp(); return reject(err); }
+      let received = "";
+      let settled = false;
 
-              if (bytesRead === 0) {
-                cleanupResp();
-                const result = Buffer.concat(chunks).toString("utf8").trim();
-                if (!result) return reject(new Error("Captcha pipe returned empty response"));
-                return resolve(result);
-              }
+      const finish = (fn) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(watchdog);
+        stream.destroy();
+        fn();
+      };
 
-              chunks.push(Buffer.from(buf.subarray(0, bytesRead)));
-              readLoop();
-            });
-          }
+      stream.on("data", (chunk) => { received += chunk; });
 
-          readLoop();
-        });
+      stream.on("end", () => {
+        const result = received.trim();
+        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+        if (!result) {
+          console.error(`[Captcha] ✗ empty response after ${elapsed}s`);
+          return finish(() => reject(new Error("Captcha pipe returned empty response")));
+        }
+        console.log(`[Captcha] ✓ got ${result.length}b in ${elapsed}s`);
+        finish(() => resolve(result));
+      });
+
+      stream.on("error", (err) => {
+        console.error("[Captcha] resp read error:", err.message);
+        finish(() => reject(new Error(`Captcha resp read failed: ${err.message}`)));
       });
     });
   });
 }
-
 // ============================================================
 // ── FORMAT HELPERS ──────────────────────────────────────────
 // ============================================================
