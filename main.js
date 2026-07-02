@@ -472,7 +472,7 @@ async function* sendToZAI(prompt, options = {}) {
     }
   };
 
-  captcha_verify_param = await getCaptchaVerifyParam();
+  const captcha_verify_param = await getCaptchaVerifyParam();
   const body = JSON.stringify(requestBody); console.log(captcha_verify_param);
 
   if (config.logging.level === "debug") {
