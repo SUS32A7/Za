@@ -472,8 +472,8 @@ async function* sendToZAI(prompt, options = {}) {
     }
   };
 
-  requestBody.captcha_verify_param = await getCaptchaVerifyParam();
-  const body = JSON.stringify(requestBody); console.log(body);
+  captcha_verify_param = await getCaptchaVerifyParam();
+  const body = JSON.stringify(requestBody); console.log(captcha_verify_param);
 
   if (config.logging.level === "debug") {
     console.log("[DEBUG] Z.AI url", url);
