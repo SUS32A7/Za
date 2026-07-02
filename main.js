@@ -434,7 +434,7 @@ async function* sendToZAI(prompt, options = {}) {
     previewMode = session.features.previewMode,
     chatId = session.chatId,
     messages = session.messages,
-    clientMessages = null,
+    clientMessages = null,  // Structured messages from client — forwarded as-is
   } = options;
 
   if (!session.initialized) await initializeSession();
@@ -451,13 +451,12 @@ async function* sendToZAI(prompt, options = {}) {
     "Content-Type": "application/json"
   };
 
+  // ── Forward structured messages, NOT flattened prompt ──
   const forwardedMessages = clientMessages
     ? clientMessages
     : [...messages, { role: "user", content: prompt }];
 
-  // ── Captcha still fetched (you confirmed the pipe works) ──
   const captchaParam = await getCaptchaVerifyParam();
-
   const requestBody = {
     model,
     chat_id: chatId,
@@ -483,56 +482,89 @@ async function* sendToZAI(prompt, options = {}) {
     console.log("[DEBUG] Z.AI request headers", JSON.stringify(headers, null, 2));
   }
 
-  // ════════════════════════════════════════════════════════════
-  // ── DEBUG MODE: log curl command instead of sending request ──
-  // ════════════════════════════════════════════════════════════
-
-  // Shell-escape helper: wrap in single quotes, escape inner single quotes
-  const shellEscape = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
-
-  // Write body to a temp file so curl quoting is bulletproof
-  const curlBodyFile = path.join(_tmpDir, `zai_debug_body_${Date.now()}.json`);
+  let res;
   try {
-    fs.writeFileSync(curlBodyFile, body, { mode: 0o644 });
+    res = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(90000) });
   } catch (e) {
-    console.error("[Curl Debug] Failed to write body file:", e.message);
+    throw new Error(`Z.AI connection error: ${e.message}`);
   }
 
-  const curlHeaderArgs = Object.entries(headers)
-    .map(([k, v]) => `  -H ${shellEscape(`${k}: ${v}`)}`)
-    .join(" \\\n");
+  // ── ADDED: Response status and headers logging ──
+  if (config.logging.level === "debug") {
+    console.log("[DEBUG] Z.AI response status:", res.status, res.statusText);
+    console.log("[DEBUG] Z.AI response headers:", JSON.stringify(Object.fromEntries(res.headers.entries()), null, 2));
+  }
 
-  const curlCmd = [
-    `curl -X POST ${shellEscape(url)} \\`,
-    `  -N \\                              # no buffering (SSE)`,
-    `  -i \\                              # show response headers`,
-    `  -H 'Accept: text/event-stream' \\`,
-    curlHeaderArgs,
-    `  -d @${curlBodyFile}                # body file (avoids quoting hell)`,
-  ].join("\n");
+  if (res.status === 401) {
+    session.initialized = false;
+    await initializeSession();
+    yield* sendToZAI(prompt, options);
+    return;
+  }
 
-  console.log("\n" + "=".repeat(70));
-  console.log("  🔧 CURL DEBUG COMMAND (request NOT sent to Z.AI)");
-  console.log("=".repeat(70));
-  console.log(curlCmd);
-  console.log("\n📝 Body file written to:", curlBodyFile);
-  console.log("📝 Body contents:");
-  console.log(body);
-  console.log("=".repeat(70) + "\n");
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    // ── ADDED: Error body logging ──
+    if (config.logging.level === "debug") {
+      console.error("[DEBUG] Z.AI error body:", errText);
+    }
+    throw new Error(`Z.AI error ${res.status}: ${errText}`);
+  }
 
-  // Also log a one-liner version with inline body (in case file gets deleted)
-  const inlineCurl = `curl -X POST ${shellEscape(url)} -N -i ${Object.entries(headers).map(([k,v]) => `-H ${shellEscape(`${k}: ${v}`)}`).join(" ")} -d ${shellEscape(body)}`;
-  console.log("── Inline version (no temp file) ──");
-  console.log(inlineCurl);
-  console.log("\n" + "=".repeat(70) + "\n");
+  const decoder = new TextDecoder();
+  let buffer = "";
 
-  throw new Error(
-    "DEBUG MODE: Request was NOT sent. A curl command has been logged to the console. " +
-    "Run it manually to debug the FRONTEND_CAPTCHA_REQUIRED issue. " +
-    `Body file: ${curlBodyFile}`
-  );
-  // ════════════════════════════════════════════════════════════
+  for await (const chunk of res.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+
+    // ── ADDED: Raw SSE line dump ──
+    if (config.logging.level === "debug") {
+      for (const line of lines) {
+        if (line.trim()) console.log("[DEBUG] Z.AI SSE line:", line.trim());
+      }
+    }
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith("data: ")) continue;
+      const dataStr = trimmed.slice(6);
+      if (dataStr === "[DONE]") return;
+      try {
+        const json = JSON.parse(dataStr);
+        let chunk = "";
+        if (json.data?.delta_content !== undefined) chunk = json.data.delta_content;
+        else if (json.choices?.[0]?.delta?.content !== undefined) chunk = json.choices[0].delta.content;
+        if (chunk) yield chunk;
+      } catch (e) {
+        // ── ADDED: Parse failure logging ──
+        if (config.logging.level === "debug") {
+          console.warn("[DEBUG] Z.AI failed to parse SSE:", dataStr);
+        }
+      }
+    }
+  }
+
+  if (buffer.trim().startsWith("data: ")) {
+    const dataStr = buffer.trim().slice(6);
+    if (dataStr !== "[DONE]") {
+      try {
+        const json = JSON.parse(dataStr);
+        let chunk = "";
+        if (json.data?.delta_content !== undefined) chunk = json.data.delta_content;
+        else if (json.choices?.[0]?.delta?.content !== undefined) chunk = json.choices[0].delta.content;
+        if (chunk) yield chunk;
+      } catch (e) {
+        // ── ADDED: Parse failure logging for buffer ──
+        if (config.logging.level === "debug") {
+          console.warn("[DEBUG] Z.AI failed to parse final SSE buffer:", dataStr);
+        }
+      }
+    }
+  }
 }
+
 // ============== DASHBOARD HTML ==============
 
 const getDashboardHTML = (host) => `<!DOCTYPE html>
