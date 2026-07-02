@@ -1,299 +1,773 @@
+// main.go
+// compile using:go build -trimpath -ldflags="-s -w" -gcflags="all=-l=4" -o captcha-server .
 package main
 
 import (
-    "bufio"
+    "bytes"
+    "compress/zlib"
+    "crypto/hmac"
+    "crypto/rand"
+    "crypto/sha1"
     "database/sql"
+    "encoding/base64"
+    "encoding/json"
+    "errors"
     "flag"
     "fmt"
-    "log"
+    "io"
+    "net/http"
     "os"
-    "strconv"
+    "sort"
     "strings"
+    "sync"
+    "sync/atomic"
     "time"
 
     _ "modernc.org/sqlite"
-
-    playwright "github.com/mxschmitt/playwright-go"
 )
 
-// ---------- Configuration ----------
+// ============================================================================
+// Configuration
+// ============================================================================
+
 const (
-    maxTokens                = 1250
-    defaultTokens            = 750
-    sendWaitMs               = 7000
-    maxRetries               = 3
-    tokenCollectionTimeoutMs = 90000
-    targetURL                = "https://chat.z.ai"
+    accessKey       = "LTAI5tSEBwYMwVKAQGpxmvTd"
+    secretKey       = "YSKfst7GaVkXwZYvVihJsKF9r89koz"
+    sceneID         = "didk33e0"
+    pipeName        = "captcha_pipe"
+    maxTokenRetries = 2
 )
 
-// ---------- Prompt user for token count ----------
-func promptTokenCount() int {
-    fmt.Printf("How many tokens to collect? [default: %d, max: %d] ", defaultTokens, maxTokens)
-    reader := bufio.NewReader(os.Stdin)
-    answer, _ := reader.ReadString('\n')
-    answer = strings.TrimSpace(answer)
+var (
+    dbPath    string
+    verbose   bool
+    gRunning  atomic.Bool
+    dbMu      sync.Mutex
+    logMu     sync.Mutex
+    globalDB  *sql.DB
+)
 
-    n := defaultTokens
-    if answer != "" {
-        if parsed, err := strconv.Atoi(answer); err == nil && parsed > 0 {
-            n = parsed
+// ============================================================================
+// Optimized HTTP Client — pooled connections, HTTP/2, keep-alive
+// ============================================================================
+
+var httpClient = &http.Client{
+    Transport: &http.Transport{
+        MaxIdleConns:          100,
+        MaxIdleConnsPerHost:   20,
+        MaxConnsPerHost:       20,
+        IdleConnTimeout:       90 * time.Second,
+        TLSHandshakeTimeout:   10 * time.Second,
+        ExpectContinueTimeout: 1 * time.Second,
+        ResponseHeaderTimeout: 15 * time.Second,
+        ForceAttemptHTTP2:     true,
+    },
+    Timeout: 30 * time.Second,
+}
+
+// ============================================================================
+// Buffer pools — eliminate GC pressure on hot paths
+// ============================================================================
+
+var bufPool = sync.Pool{
+    New: func() interface{} { return bytes.NewBuffer(make([]byte, 0, 4096)) },
+}
+
+var zlibWriterPool = sync.Pool{
+    New: func() interface{} {
+        w, _ := zlib.NewWriterLevel(io.Discard, zlib.DefaultCompression)
+        return w
+    },
+}
+
+// ============================================================================
+// Logging — silent unless --verbose
+// ============================================================================
+
+func logError(msg string) {
+    if !verbose {
+        return
+    }
+    ts := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+    logMu.Lock()
+    fmt.Fprintf(os.Stderr, "[%s] ERROR: %s\n", ts, msg)
+    logMu.Unlock()
+}
+
+func logInfo(msg string) {
+    if !verbose {
+        return
+    }
+    ts := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+    logMu.Lock()
+    fmt.Fprintf(os.Stderr, "[%s] INFO: %s\n", ts, msg)
+    logMu.Unlock()
+}
+
+// ============================================================================
+// URL encoding — custom lookup table, zero allocations for safe chars
+// ============================================================================
+
+const hexUpper = "0123456789ABCDEF"
+const hexLower = "0123456789abcdef"
+
+var baseSafeTable [256]bool
+
+func init() {
+    for i := 0; i < 256; i++ {
+        c := byte(i)
+        if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            c == '-' || c == '_' || c == '.' || c == '~' {
+            baseSafeTable[i] = true
         }
     }
-    if n > maxTokens {
-        fmt.Printf("⚠️  Capping to max %d.\n", maxTokens)
-        n = maxTokens
+}
+
+func urlEncode(s string, safe string) string {
+    var safeTable [256]bool
+    safeTable = baseSafeTable
+    for i := 0; i < len(safe); i++ {
+        safeTable[safe[i]] = true
     }
-    return n
+
+    var b strings.Builder
+    b.Grow(len(s)*3 + 16)
+    for i := 0; i < len(s); i++ {
+        c := s[i]
+        if safeTable[c] {
+            b.WriteByte(c)
+        } else {
+            b.WriteByte('%')
+            b.WriteByte(hexUpper[c>>4])
+            b.WriteByte(hexUpper[c&0x0F])
+        }
+    }
+    return b.String()
 }
 
-// ---------- Selector wait result ----------
-type selResult struct {
-    loc playwright.ElementHandle
-    err error
+func fromHex(c byte) byte {
+    switch {
+    case c >= '0' && c <= '9':
+        return c - '0'
+    case c >= 'A' && c <= 'F':
+        return c - 'A' + 10
+    case c >= 'a' && c <= 'f':
+        return c - 'a' + 10
+    default:
+        return 0
+    }
 }
 
-// ---------- Single page collection attempt ----------
-func tryCollect(page playwright.Page, total int) ([]string, error) {
-    fmt.Printf("  🌐 Navigating to %s\n", targetURL)
-    _, err := page.Goto(targetURL, playwright.PageGotoOptions{
-        WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-        Timeout:   playwright.Float(60000),
+// ============================================================================
+// Base64 / HMAC-SHA1 — wraps stdlib (assembly-optimized on amd64/arm64)
+// ============================================================================
+
+func base64Encode(data []byte) string {
+    return base64.StdEncoding.EncodeToString(data)
+}
+
+func hmacSHA1(key, msg []byte) []byte {
+    h := hmac.New(sha1.New, key)
+    h.Write(msg)
+    return h.Sum(nil)
+}
+
+// ============================================================================
+// UUID v4 — manual hex encoding, no fmt.Sprintf
+// ============================================================================
+
+func generateUUID() string {
+    var b [16]byte
+    rand.Read(b[:])
+    b[6] = (b[6] & 0x0F) | 0x40
+    b[8] = (b[8] & 0x3F) | 0x80
+
+    var dst [36]byte
+    j := 0
+    for i := 0; i < 16; i++ {
+        if i == 4 || i == 6 || i == 8 || i == 10 {
+            dst[j] = '-'
+            j++
+        }
+        dst[j] = hexLower[b[i]>>4]
+        dst[j+1] = hexLower[b[i]&0xF]
+        j += 2
+    }
+    return string(dst[:])
+}
+
+// ============================================================================
+// Timestamp helpers
+// ============================================================================
+
+func getTimestampUTC() string {
+    return time.Now().UTC().Format("2006-01-02T15:04:05Z")
+}
+
+func currentTimeMillis() int64 {
+    return time.Now().UnixMilli()
+}
+
+// ============================================================================
+// JSON marshaling — disables HTML escaping to match nlohmann::json::dump()
+// Uses pooled buffer to reduce allocations
+// ============================================================================
+
+func jsonMarshal(v interface{}) ([]byte, error) {
+    buf := bufPool.Get().(*bytes.Buffer)
+    buf.Reset()
+    enc := json.NewEncoder(buf)
+    enc.SetEscapeHTML(false)
+    if err := enc.Encode(v); err != nil {
+        bufPool.Put(buf)
+        return nil, err
+    }
+    // Encode adds trailing newline — trim it
+    raw := buf.Bytes()
+    result := make([]byte, len(raw)-1)
+    copy(result, raw)
+    bufPool.Put(buf)
+    return result, nil
+}
+
+// ============================================================================
+// Aliyun signature — sorted params, HMAC-SHA1, base64
+// ============================================================================
+
+func generateSignature(params map[string]string, secKey string) string {
+    keys := make([]string, 0, len(params)+1)
+    for k := range params {
+        keys = append(keys, k)
+    }
+    sort.Strings(keys)
+
+    var canonical strings.Builder
+    canonical.Grow(512)
+    for i, k := range keys {
+        if i > 0 {
+            canonical.WriteByte('&')
+        }
+        canonical.WriteString(urlEncode(k, ""))
+        canonical.WriteByte('=')
+        canonical.WriteString(urlEncode(params[k], ""))
+    }
+
+    stringToSign := "POST&" + urlEncode("/", "") + "&" + urlEncode(canonical.String(), "")
+    signingKey := secKey + "&"
+    return base64Encode(hmacSHA1([]byte(signingKey), []byte(stringToSign)))
+}
+
+func buildQueryString(params map[string]string) string {
+    keys := make([]string, 0, len(params))
+    for k := range params {
+        keys = append(keys, k)
+    }
+    sort.Strings(keys)
+
+    var b strings.Builder
+    b.Grow(512)
+    for i, k := range keys {
+        if i > 0 {
+            b.WriteByte('&')
+        }
+        b.WriteString(urlEncode(k, ""))
+        b.WriteByte('=')
+        b.WriteString(urlEncode(params[k], ""))
+    }
+    return b.String()
+}
+
+// ============================================================================
+// HTTP POST — pooled buffer for response, connection reuse
+// ============================================================================
+
+func httpPost(url, body string, extraHeaders map[string]string) (string, error) {
+    req, err := http.NewRequest("POST", url, strings.NewReader(body))
+    if err != nil {
+        return "", err
+    }
+    req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+    req.ContentLength = int64(len(body))
+    for k, v := range extraHeaders {
+        req.Header.Set(k, v)
+    }
+
+    resp, err := httpClient.Do(req)
+    if err != nil {
+        return "", err
+    }
+    defer resp.Body.Close()
+
+    buf := bufPool.Get().(*bytes.Buffer)
+    buf.Reset()
+    if _, err := io.Copy(buf, resp.Body); err != nil {
+        bufPool.Put(buf)
+        return "", err
+    }
+    result := buf.String()
+    bufPool.Put(buf)
+    return result, nil
+}
+
+// ============================================================================
+// SQLite — global connection, pure-Go driver (no CGO)
+// ============================================================================
+
+func initDB() error {
+    var err error
+    globalDB, err = sql.Open("sqlite", dbPath)
+    if err != nil {
+        return err
+    }
+    globalDB.SetMaxOpenConns(1)
+    globalDB.SetMaxIdleConns(1)
+    return nil
+}
+
+func getNextToken() (string, bool) {
+    dbMu.Lock()
+    defer dbMu.Unlock()
+
+    if _, err := os.Stat(dbPath); err != nil {
+        logError("Database file not found: " + dbPath)
+        return "", false
+    }
+
+    var token string
+    err := globalDB.QueryRow("SELECT token FROM tokens ORDER BY id LIMIT 1;").Scan(&token)
+    if err != nil {
+        if errors.Is(err, sql.ErrNoRows) {
+            logError("No device tokens available in table 'tokens'")
+        } else {
+            logError("Failed to query token: " + err.Error())
+        }
+        return "", false
+    }
+    return token, true
+}
+
+func removeToken(token string) {
+    dbMu.Lock()
+    defer dbMu.Unlock()
+
+    _, err := globalDB.Exec("DELETE FROM tokens WHERE token = ?;", token)
+    if err != nil {
+        logError("Failed to delete consumed token: " + err.Error())
+    }
+}
+
+// ============================================================================
+// JSON struct types — field order matches nlohmann::json sorted key output
+// ============================================================================
+
+type InitCaptchaResponse struct {
+    CertifyID string `json:"CertifyId"`
+}
+
+type CVP struct {
+    CertifyID   string `json:"certifyId"`
+    Data        string `json:"data"`
+    DeviceToken string `json:"deviceToken"`
+    SceneID     string `json:"sceneId"`
+}
+
+type VerifyCaptchaResponse struct {
+    Success bool `json:"Success"`
+    Result  struct {
+        VerifyResult  bool   `json:"VerifyResult"`
+        SecurityToken string `json:"securityToken"`
+        CertifyID     string `json:"certifyId"`
+    } `json:"Result"`
+}
+
+type FinalPayload struct {
+    CertifyID     string `json:"certifyId"`
+    IsSign        bool   `json:"isSign"`
+    SceneID       string `json:"sceneId"`
+    SecurityToken string `json:"securityToken"`
+}
+
+type TrackList struct {
+    FI        string `json:"fi"`
+    KS        string `json:"ks"`
+    MC        string `json:"mc"`
+    MP        string `json:"mp"`
+    MU        string `json:"mu"`
+    StartTime int64  `json:"startTime"`
+    TC        string `json:"tc"`
+    TE        string `json:"te"`
+    TMV       string `json:"tmv"`
+}
+
+type Track struct {
+    TrackList      TrackList `json:"TrackList"`
+    TrackStartTime int64     `json:"TrackStartTime"`
+    VerifyTime     int64     `json:"VerifyTime"`
+    Arg            string    `json:"arg"`
+}
+
+// ============================================================================
+// PART 1: InitCaptchaV3
+// ============================================================================
+
+func initCaptcha() (string, error) {
+    params := map[string]string{
+        "AccessKeyId":      accessKey,
+        "Action":           "InitCaptchaV3",
+        "Format":           "JSON",
+        "Language":         "en",
+        "Mode":             "popup",
+        "SceneId":          sceneID,
+        "SignatureMethod":  "HMAC-SHA1",
+        "SignatureNonce":   generateUUID(),
+        "SignatureVersion": "1.0",
+        "Timestamp":        getTimestampUTC(),
+        "UpLang":           "true",
+        "Version":          "2023-03-05",
+    }
+    params["Signature"] = generateSignature(params, secretKey)
+
+    body := buildQueryString(params)
+    resp, err := httpPost(
+        "https://no8xfe.captcha-open-southeast.aliyuncs.com/", body, nil)
+    if err != nil {
+        return "", err
+    }
+
+    var result InitCaptchaResponse
+    if err := json.Unmarshal([]byte(resp), &result); err != nil {
+        return "", fmt.Errorf("parse InitCaptchaV3 response: %w", err)
+    }
+    return result.CertifyID, nil
+}
+
+// ============================================================================
+// PART 2: Generate arg — RC4-like stream cipher with custom KSA
+// ============================================================================
+
+var argPermTable = [64]int{
+    32, 50, 10, 51, 6, 44, 37, 16, 46, 11, 62, 19, 43, 25, 23, 30,
+    60, 33, 53, 34, 7, 26, 12, 48, 5, 2, 20, 4, 61, 13, 47, 49,
+    18, 29, 27, 22, 1, 17, 39, 56, 41, 38, 55, 31, 15, 58, 52, 40,
+    8, 57, 45, 35, 59, 36, 42, 54, 63, 3, 24, 28, 14, 9, 0, 21,
+}
+
+const argConstant = "4xrihv8zb8tf1mfj"
+
+func generateArg(certifyID string) string {
+    encoded := urlEncode(certifyID, "")
+
+    // URL-decode (identity for already-decoded strings, kept for faithfulness)
+    o := make([]byte, 0, len(encoded))
+    for i := 0; i < len(encoded); {
+        if encoded[i] == '%' && i+2 < len(encoded) {
+            o = append(o, fromHex(encoded[i+1])<<4|fromHex(encoded[i+2]))
+            i += 3
+        } else {
+            o = append(o, encoded[i])
+            i++
+        }
+    }
+
+    // KSA
+    r := argPermTable // stack-allocated copy
+    n := argConstant
+    rlen := 64
+
+    i, j := 0, 0
+    for i < rlen {
+        j = (((i + j + r[i] + r[j]) >> 1) + int(n[i%len(n)])) & (rlen - 1)
+        if i != j {
+            r[i], r[j] = r[j], r[i]
+        }
+        i++
+    }
+
+    // PRGA
+    t := make([]byte, 0, len(o))
+    e, a := 0, 0
+    for idx := 0; idx < len(o); idx++ {
+        a = ((e ^ a) + (r[e] ^ r[a])) & (rlen - 1)
+        if e != a {
+            r[e], r[a] = r[a], r[e]
+        }
+        m := int(o[idx])
+        m = m + e + r[e] - a - r[a]
+        m = m ^ (r[e] + r[a])
+        m = m ^ r[(r[e]+r[a])&(rlen-1)]
+        m = m & 255
+        t = append(t, byte(m))
+        e = (e + 1) & (rlen - 1)
+    }
+    return base64Encode(t)
+}
+
+// ============================================================================
+// PART 4: ali_hash — custom hash with 16-byte state
+// ============================================================================
+
+func aliHash(inputStr, saltStr string) string {
+    o := inputStr
+    r := saltStr
+    aLen := len(o)
+    m := len(r)
+
+    var e [16]int
+    for i := 0; i < 16; i++ {
+        e[i] = (i << 4) + (i % 16)
+    }
+    f := 16
+
+    i, j := 0, 0
+    for i < f {
+        j = (((i + j + e[i] + e[j]) >> 1) + int(r[i%m])) & (f - 1)
+        e[i], e[j] = e[j], e[i]
+        i++
+    }
+
+    idx, p, q := 0, 0, 0
+    for idx < aLen {
+        q = ((p ^ q) + (e[p] ^ e[q])) & (f - 1)
+        e[p], e[q] = e[q], e[p]
+        C := int(o[idx])
+        C = (C + p + q) ^ e[p] ^ e[q]
+        C = C & 255
+        e[p] = C
+        p = (p + 1) & (f - 1)
+        idx++
+    }
+
+    for step := 0; step < 2*f; step++ {
+        pos := step % f
+        if pos != 0 {
+            e[pos] ^= e[pos-1]
+        } else {
+            e[0] ^= e[f-1]
+        }
+    }
+
+    var result [32]byte
+    for i, b := range e {
+        result[i*2] = hexLower[(b>>4)&0xF]
+        result[i*2+1] = hexLower[b&0xF]
+    }
+    return string(result[:])
+}
+
+// ============================================================================
+// PART 7: encrypt — same RC4-like cipher, different key
+// ============================================================================
+
+const encryptKey = "3e627e1b4c63f913"
+
+func encrypt(plaintext []byte) string {
+    o := plaintext
+    n := encryptKey
+    r := argPermTable // stack-allocated copy
+    rlen := 64
+
+    oKsa, tKsa := 0, 0
+    for oKsa < rlen {
+        tKsa = (((oKsa + tKsa + r[oKsa] + r[tKsa]) >> 1) + int(n[oKsa%len(n)])) & (rlen - 1)
+        if oKsa != tKsa {
+            r[oKsa], r[tKsa] = r[tKsa], r[oKsa]
+        }
+        oKsa++
+    }
+
+    t := make([]byte, 0, len(o))
+    e, a := 0, 0
+    for nPrga := 0; nPrga < len(o); nPrga++ {
+        a = ((e ^ a) + (r[e] ^ r[a])) & (rlen - 1)
+        if e != a {
+            r[e], r[a] = r[a], r[e]
+        }
+        m := int(o[nPrga])
+        m = m + e + r[e] - a - r[a]
+        m = m ^ (r[e] + r[a])
+        m = m ^ r[(r[e]+r[a])&(rlen-1)]
+        m = m & 255
+        t = append(t, byte(m))
+        e = (e + 1) & (rlen - 1)
+    }
+    return base64Encode(t)
+}
+
+// ============================================================================
+// zlib compress — pooled writer, pooled output buffer
+// ============================================================================
+
+func zlibCompress(data []byte) []byte {
+    buf := bufPool.Get().(*bytes.Buffer)
+    buf.Reset()
+    buf.Grow(len(data) + len(data)/2 + 128)
+
+    w := zlibWriterPool.Get().(*zlib.Writer)
+    w.Reset(buf)
+    w.Write(data)
+    w.Close()
+    zlibWriterPool.Put(w)
+
+    result := make([]byte, buf.Len())
+    copy(result, buf.Bytes())
+    bufPool.Put(buf)
+    return result
+}
+
+// ============================================================================
+// PART 8: VerifyCaptchaV3
+// ============================================================================
+
+func verifyCaptcha(certifyID, dataValue, deviceToken string) (string, error) {
+    cvpJSON, err := jsonMarshal(CVP{
+        CertifyID:   certifyID,
+        Data:        dataValue,
+        DeviceToken: deviceToken,
+        SceneID:     sceneID,
     })
     if err != nil {
-        return nil, fmt.Errorf("navigation failed: %w", err)
+        return "", err
     }
 
-    // ---------- Wait for model button + textarea in parallel ----------
-    fmt.Println("  🔍 Locating UI elements in parallel...")
-
-    modelBtnCh := make(chan selResult, 1)
-    textareaCh := make(chan selResult, 1)
-
-    go func() {
-        loc, err := page.WaitForSelector("#model-selector-glm-4_7-button",
-            playwright.PageWaitForSelectorOptions{Timeout: playwright.Float(15000)})
-        modelBtnCh <- selResult{loc, err}
-    }()
-
-    go func() {
-        loc, err := page.WaitForSelector("#chat-input",
-            playwright.PageWaitForSelectorOptions{Timeout: playwright.Float(15000)})
-        textareaCh <- selResult{loc, err}
-    }()
-
-    mbRes := <-modelBtnCh
-    if mbRes.err != nil {
-        return nil, fmt.Errorf("model button not found: %w", mbRes.err)
+    params := map[string]string{
+        "AccessKeyId":        accessKey,
+        "Action":             "VerifyCaptchaV3",
+        "Format":             "JSON",
+        "SignatureMethod":    "HMAC-SHA1",
+        "SignatureVersion":   "1.0",
+        "Timestamp":          getTimestampUTC(),
+        "Version":            "2023-03-05",
+        "SceneId":            sceneID,
+        "CertifyId":          certifyID,
+        "CaptchaVerifyParam": string(cvpJSON),
+        "SignatureNonce":     generateUUID(),
     }
-    taRes := <-textareaCh
-    if taRes.err != nil {
-        return nil, fmt.Errorf("textarea not found: %w", taRes.err)
-    }
-    textarea := taRes.loc
-    fmt.Println("  ✅ Model button & textarea found")
+    params["Signature"] = generateSignature(params, secretKey)
 
-    // ---------- Fill textarea & click send ----------
-    if err := textarea.Fill("__"); err != nil {
-        return nil, fmt.Errorf("failed to fill textarea: %w", err)
-    }
-    fmt.Println(`  ✅ Textarea filled with "__"`)
-
-    sendBtn, err := page.WaitForSelector("#send-message-button",
-        playwright.PageWaitForSelectorOptions{Timeout: playwright.Float(5000)})
+    body := buildQueryString(params)
+    resp, err := httpPost(
+        "https://no8xfe-verify.captcha-open-southeast.aliyuncs.com/",
+        body, map[string]string{"Referer": ""})
     if err != nil {
-        return nil, fmt.Errorf("send button not found: %w", err)
+        return "", err
     }
-    if err := sendBtn.Click(); err != nil {
-        return nil, fmt.Errorf("failed to click send: %w", err)
+
+    var respJSON VerifyCaptchaResponse
+    if err := json.Unmarshal([]byte(resp), &respJSON); err != nil {
+        return "", fmt.Errorf("parse VerifyCaptchaV3 response: %w", err)
     }
-    fmt.Println("  ✅ Send clicked")
 
-    // ---------- Wait for token endpoint ----------
-    fmt.Printf("  ⏳ Waiting %dms for token endpoint to initialize...\n", sendWaitMs)
-    time.Sleep(time.Duration(sendWaitMs) * time.Millisecond)
-
-    // ---------- Collect tokens with timeout ----------
-    fmt.Println("  🚀 Collecting tokens...")
-    t0 := time.Now()
-
-    page.SetDefaultTimeout(float64(tokenCollectionTimeoutMs))
-
-    jsExpr := `async (total) => {
-        const out = new Array(total);
-        for (let i = 0; i < total; i++) {
-            const tok = window.z_um.getToken();
-            out[i] = (tok && typeof tok.then === 'function') ? await tok : tok;
-            if (i % 50 === 0) {
-                await new Promise(r => setTimeout(r, 0));
+    if respJSON.Success && respJSON.Result.VerifyResult {
+        st := respJSON.Result.SecurityToken
+        ci := respJSON.Result.CertifyID
+        if st != "" && ci != "" {
+            fpJSON, err := jsonMarshal(FinalPayload{
+                CertifyID:     ci,
+                IsSign:        true,
+                SceneID:       sceneID,
+                SecurityToken: st,
+            })
+            if err != nil {
+                return "", err
             }
+            return base64Encode(fpJSON), nil
         }
-        return out;
-    }`
-
-    result, err := page.Evaluate(jsExpr, total)
-    if err != nil {
-        return nil, fmt.Errorf("token collection failed: %w", err)
+        logError("VerifyCaptchaV3 succeeded but securityToken/certifyId empty for deviceToken=" + deviceToken)
+    } else if respJSON.Success {
+        logError("deviceToken failed verification (VerifyResult=false): " + deviceToken)
+    } else {
+        logError("VerifyCaptchaV3 request unsuccessful for deviceToken=" + deviceToken + " response=" + resp)
     }
-
-    elapsed := time.Since(t0).Seconds()
-    fmt.Printf("  ✅ Collected tokens in %.2fs\n", elapsed)
-
-    // ---------- Convert result to []string ----------
-    tokens := make([]string, 0, total)
-    if arr, ok := result.([]interface{}); ok {
-        for _, v := range arr {
-            tokens = append(tokens, fmt.Sprintf("%v", v))
-        }
-    }
-
-    return tokens, nil
+    return "", nil
 }
 
-// ---------- Collect a batch with retries (fresh page each attempt) ----------
-func collectBatch(browser playwright.Browser, total int) ([]string, error) {
-    var lastErr error
+// ============================================================================
+// Compute final payload — tries tokens until success or exhausted
+// ============================================================================
 
-    for attempt := 1; attempt <= maxRetries; attempt++ {
-        fmt.Printf("  🔄 Attempt %d of %d\n", attempt, maxRetries)
+func computeFinalPayload() string {
+    for attempt := 0; attempt < maxTokenRetries; attempt++ {
+        deviceToken, ok := getNextToken()
+        if !ok {
+            logError(fmt.Sprintf("No device tokens remaining (attempt %d/%d)",
+                attempt+1, maxTokenRetries))
+            return ""
+        }
+        logInfo(fmt.Sprintf("Attempt %d/%d using deviceToken=%s",
+            attempt+1, maxTokenRetries, deviceToken))
 
-        page, err := browser.NewPage()
+        payload, err := tryCompute(deviceToken)
         if err != nil {
-            lastErr = err
+            logError(fmt.Sprintf("Attempt %d failed for deviceToken=%s: %v",
+                attempt+1, deviceToken, err))
             continue
         }
-
-        tokens, err := tryCollect(page, total)
-        _ = page.Close() // close old page before next attempt
-
-        if err == nil {
-            return tokens, nil
+        if payload != "" {
+            return payload
         }
-
-        lastErr = err
-        fmt.Printf("  ❌ Attempt %d failed: %v\n", attempt, err)
-        if attempt < maxRetries {
-            fmt.Println("  ♻️  Retrying with a fresh page load...")
-        }
+        logError("deviceToken=" + deviceToken + " produced empty payload, retrying")
     }
-
-    return nil, lastErr
+    logError(fmt.Sprintf("All %d token retries exhausted", maxTokenRetries))
+    return ""
 }
 
-// ---------- Build SQLite database ----------
-func buildSQLite(tokens []string, filePath string) error {
-    os.Remove(filePath) // start fresh
-
-    db, err := sql.Open("sqlite", filePath)
+func tryCompute(deviceToken string) (string, error) {
+    certifyID, err := initCaptcha()
     if err != nil {
-        return err
-    }
-    defer db.Close()
-
-    if err := db.Ping(); err != nil {
-        return err
+        removeToken(deviceToken)
+        return "", fmt.Errorf("initCaptcha: %w", err)
     }
 
-    if _, err := db.Exec("CREATE TABLE tokens (id INTEGER PRIMARY KEY, token TEXT);"); err != nil {
-        return err
-    }
+    argValue := generateArg(certifyID)
+    ct := currentTimeMillis()
 
-    tx, err := db.Begin()
+    track := Track{
+        TrackList: TrackList{
+            StartTime: ct,
+        },
+        TrackStartTime: ct,
+        VerifyTime:     ct + 300,
+        Arg:            argValue,
+    }
+    jsonBytes, err := jsonMarshal(track)
     if err != nil {
-        return err
+        removeToken(deviceToken)
+        return "", err
     }
 
-    stmt, err := tx.Prepare("INSERT INTO tokens (id, token) VALUES (?, ?);")
+    h := aliHash(string(jsonBytes), "0000")
+    combined := h + string(jsonBytes)
+    compressed := zlibCompress([]byte(combined))
+    fb64 := base64Encode(compressed)
+    finalVal := encrypt([]byte(fb64))
+
+    // Always remove token after use — prevents conflicts
+    removeToken(deviceToken)
+
+    payload, err := verifyCaptcha(certifyID, finalVal, deviceToken)
     if err != nil {
-        _ = tx.Rollback()
-        return err
+        return "", fmt.Errorf("verifyCaptcha: %w", err)
     }
-    defer stmt.Close()
-
-    for i, token := range tokens {
-        if _, err := stmt.Exec(i, token); err != nil {
-            _ = tx.Rollback()
-            return err
-        }
-    }
-
-    return tx.Commit()
+    return payload, nil
 }
 
-// ---------- Main ----------
+// ============================================================================
+// Main
+// ============================================================================
+
 func main() {
-    // --conc=N  (0 < N < 6, default 3)
-    concFlag := flag.Int("conc", 3, "number of collection batches (1-5)")
+    flag.StringVar(&dbPath, "db-path", "tokens.sqlite", "Path to SQLite database")
+    flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
     flag.Parse()
 
-    conc := *concFlag
-    if conc < 1 || conc > 5 {
-        fmt.Fprintf(os.Stderr, "❌ --conc must be between 1 and 5 (got %d)\n", conc)
+    logInfo("Starting with db-path='" + dbPath + "' verbose=true")
+
+    if err := initDB(); err != nil {
+        fmt.Fprintf(os.Stderr, "Failed to open database: %v\n", err)
         os.Exit(1)
     }
+    defer globalDB.Close()
 
-    total := promptTokenCount()
-    fmt.Printf("\n🎯 Collecting %d tokens per batch, %d batches total\n", total, conc)
-
-    // ---------- Launch Playwright ----------
-    fmt.Println("📦 Installing Playwright Chromium browser (if needed)...")
-    if err := playwright.Install(&playwright.RunOptions{
-        Browsers: []string{"chromium"},
-    }); err != nil {
-        log.Fatalf("Failed to install Playwright: %v", err)
-    }
-
-    pw, err := playwright.Run()
-    if err != nil {
-        log.Fatalf("Failed to start Playwright: %v", err)
-    }
-    defer pw.Stop()
-
-    browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-        Headless: playwright.Bool(true),
-    })
-    if err != nil {
-        log.Fatalf("Failed to launch browser: %v", err)
-    }
-    defer browser.Close()
-
-    // ---------- Batch loop: N starts at 1, runs until N == conc ----------
-    var allTokens []string
-
-    for n := 1; n <= conc; n++ {
-        fmt.Printf("\n📦 Batch %d of %d\n", n, conc)
-
-        tokens, err := collectBatch(browser, total)
-        if err != nil {
-            fmt.Printf("❌ Batch %d failed after all retries: %v\n", n, err)
-            continue
-        }
-
-        // Merge with previously collected tokens
-        allTokens = append(allTokens, tokens...)
-        fmt.Printf("✅ Batch %d: collected %d tokens (running total: %d)\n",
-            n, len(tokens), len(allTokens))
-
-        // N == limit → build final database
-        if n == conc {
-            fmt.Println("\n📋 Reached batch limit — building final database...")
-        }
-    }
-
-    if len(allTokens) == 0 {
-        fmt.Fprintln(os.Stderr, "🚫 No tokens collected. Aborting.")
-        os.Exit(1)
-    }
-
-    // ---------- Build & save SQLite ----------
-    fmt.Printf("\n🗄️  Building SQLite database with %d total tokens...\n", len(allTokens))
-    if err := buildSQLite(allTokens, "tokens.sqlite"); err != nil {
-        fmt.Fprintf(os.Stderr, "❌ Failed to build database: %v\n", err)
-        os.Exit(1)
-    }
-
-    if info, err := os.Stat("tokens.sqlite"); err == nil {
-        fmt.Printf("✅ Saved: tokens.sqlite (%.1f KB)\n", float64(info.Size())/1024)
-    }
-
-    fmt.Println("\n🎉 Script finished successfully.")
+    gRunning.Store(true)
+    runServer()
 }
