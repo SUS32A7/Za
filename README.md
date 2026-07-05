@@ -1,117 +1,110 @@
 # GLM Bridge — Z.AI Proxy API
 
-An OpenAI API proxy for [chat.z.ai](https://chat.z.ai), letting you use Z.AI's models through any OpenAI-compatible tool.
+An OpenAI-compatible API proxy for [chat.z.ai](https://chat.z.ai). Drop it in front of any OpenAI-compatible tool and start using Z.AI's GLM models without browser automation or complex setup.
 
 ---
 
-## ✨ Features
+## Features
 
-- **OpenAI-Compatible API** — Drop-in replacement for `/v1/chat/completions` and `/v1/models`.
-- **Direct HTTP Mode** — No browser automation, no Playwright, no Selenium. Pure Go HTTP.
-- **In-Memory Captcha** — Aliyun CaptchaV3 verification computed in-process (no FIFO/named pipes).
-- **Streaming (SSE) + Non-Streaming** — Full support for `stream: true` with keep-alive ticks.
-- **Session Management** — Per-client sessions via `X-Session-Id` header with 30-minute TTL.
-- **Feature Toggles** — Web search, deep thinking, image generation, preview mode, history persistence.
-- **Token Pool** — Device tokens stored in `tokens.sqlite`, consumed FIFO and removed after use.
-- **Live Dashboard** — Status, features, and curl examples served at `/`.
-- **Pure-Go SQLite** — Uses `modernc.org/sqlite` (no CGO required).
-
----
-
-## 📦 Supported Models
-
-| Model ID         | Notes                       |
-|------------------|-----------------------------|
-| `glm-4.7`        |                             |
-| `glm-5`          | Default                     |
-| `GLM-5-Turbo`    |                             |
-| `GLM-5v-Turbo`   | Vision variant              |
-| `GLM-5.1`        | Latest                      |
+- **OpenAI-compatible** — Works as a drop-in replacement for `/v1/chat/completions` and `/v1/models`
+- **Pure HTTP** — No Playwright, no Selenium, no browser overhead
+- **In-process captcha** — Aliyun CaptchaV3 verification handled entirely in-memory
+- **Streaming + non-streaming** — Full SSE support with keep-alive ticks
+- **Session management** — Per-client conversation threads via `X-Session-Id`, with 30-minute TTL
+- **Feature toggles** — Web search, deep thinking, image generation, preview mode, and history persistence
+- **Token pool** — Device tokens stored in `tokens.sqlite`, consumed FIFO and removed after use
+- **Live dashboard** — Status, features, and curl examples at `/`
+- **Pure-Go SQLite** — Uses `modernc.org/sqlite` — no CGO required
 
 ---
 
-## 🚀 Usage
+## Supported Models
+
+| Model ID | Notes |
+|---|---|
+| `glm-4.7` | Available without `ZAI_TOKEN` |
+| `glm-5` | Default |
+| `GLM-5-Turbo` | |
+| `GLM-5v-Turbo` | Vision variant |
+| `GLM-5.1` | Latest |
+
+> **Note:** If `ZAI_TOKEN` is not set, only `glm-4.7` is available.
+
+---
+
+## Getting Started
 
 ```bash
-# 1. Clone the repository
+# 1. Clone the repo
 git clone https://github.com/izaart95-jpg/GLM-Free-API/ zai-api
 cd zai-api
 
 # 2. Initialize the Go module
 go mod init zai-api
-
-# 3. Pull dependencies
 go mod tidy
 
-# 4. Generate the tokens.sqlite database
+# 3. Generate the token database
 go run init.go
+# Recommended: build first for better performance and faster startup:
+#   go build -o token-collector -ldflags="-s -w" . && ./token-collector
 
-# 5. After tokens.sqlite is generated, start the bridge
+# 4. Start the server
 go run main.go
-
-# 6. Enjoy 🎉
+# Recommended: build first for better performance and faster startup:
+#   go build -o zai-api -ldflags="-s -w" . && ./zai-api
 ```
 
-Once running, you'll see the startup banner with your dashboard URL and auth token.
-
-### Building a Binary
-
-```bash
-go build -trimpath -ldflags="-s -w" -gcflags="all=-l=4" -o zai-bridge .
-./zai-bridge --db-path tokens.sqlite --verbose
-```
+On startup, you'll see a banner with your dashboard URL and auth token.
 
 ---
 
-## ⚙️ Configuration
-
-All settings are controlled via environment variables or CLI flags.
+## Configuration
 
 ### CLI Flags
 
-| Flag        | Default          | Description                          |
-|-------------|------------------|--------------------------------------|
-| `--db-path` | `tokens.sqlite`  | Path to the SQLite token database    |
-| `--verbose` | `false`          | Enable verbose captcha/debug logging |
+| Flag | Default | Description |
+|---|---|---|
+| `--db-path` | `tokens.sqlite` | Path to the SQLite token database |
+| `--verbose` | `false` | Enable verbose captcha/debug logging |
 
 ### Environment Variables
 
-| Variable      | Default     | Description                                      |
-|---------------|-------------|--------------------------------------------------|
-| `PORT`        | `3001`      | HTTP server port                                 |
-| `HOST`        | `0.0.0.0`   | HTTP server bind address                         |
-| `AUTH_TOKEN`  | `Waguri`    | Bearer token clients must supply                 |
-| `TIMEOUT`     | `300000`    | Default request timeout (ms)                     |
-| `ZAI_TOKEN`   | *(empty)*   | Hardcoded Z.AI JWT (skips guest init)            |
-| `LOG_LEVEL`   | `debug`     | Log level (`debug` enables Z.AI request dumps)   |
-| `LOG_FORMAT`  | `text`      | Log format                                       |
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `3001` | HTTP server port |
+| `HOST` | `0.0.0.0` | Bind address |
+| `AUTH_TOKEN` | `Waguri` | Bearer token for client authentication |
+| `TIMEOUT` | `300000` | Request timeout in milliseconds |
+| `ZAI_TOKEN` | *(empty)* | Hardcoded Z.AI JWT — skips guest initialization |
+| `LOG_LEVEL` | `debug` | Log level (`debug` dumps Z.AI requests/responses) |
+| `LOG_FORMAT` | `text` | Log format |
 
 ---
 
-## 🔌 API Endpoints
+## API Reference
 
 ### OpenAI-Compatible
 
-| Method | Path                    | Description                                  |
-|--------|-------------------------|----------------------------------------------|
-| `POST` | `/v1/chat/completions`  | Chat completion (streaming + non-streaming)  |
-| `GET`  | `/v1/models`            | List available models                        |
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/chat/completions` | Chat completions (streaming + non-streaming) |
+| `GET` | `/v1/models` | List available models |
 
 ### Management
 
-| Method | Path                     | Description                                      |
-|--------|--------------------------|--------------------------------------------------|
-| `POST` | `/features`              | Toggle `webSearch`, `thinking`, `imageGen`, etc. |
-| `POST` | `/admin/session/clear`   | Clear all conversation histories                 |
-| `GET`  | `/status`                | Live session + feature status (JSON)             |
-| `GET`  | `/admin/health`          | Health check (`200` / `503`)                     |
-| `GET`  | `/`                      | HTML dashboard                                   |
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/features` | Toggle `webSearch`, `thinking`, `imageGen`, etc. |
+| `POST` | `/admin/session/clear` | Clear all conversation histories |
+| `GET` | `/status` | Live session and feature status (JSON) |
+| `GET` | `/admin/health` | Health check (`200` / `503`) |
+| `GET` | `/` | HTML dashboard |
 
 ---
 
-## 🧪 Examples
+## Examples
 
-### Non-Streaming
+**Basic non-streaming request**
 
 ```bash
 curl -X POST http://localhost:3001/v1/chat/completions \
@@ -120,13 +113,11 @@ curl -X POST http://localhost:3001/v1/chat/completions \
   -d '{
     "model": "glm-5",
     "stream": false,
-    "messages": [
-      {"role": "user", "content": "Hello, who are you?"}
-    ]
+    "messages": [{"role": "user", "content": "Hello, who are you?"}]
   }'
 ```
 
-### Streaming (SSE)
+**Streaming (SSE)**
 
 ```bash
 curl -N -X POST http://localhost:3001/v1/chat/completions \
@@ -135,13 +126,11 @@ curl -N -X POST http://localhost:3001/v1/chat/completions \
   -d '{
     "model": "glm-5",
     "stream": true,
-    "messages": [
-      {"role": "user", "content": "Write a haiku about Go."}
-    ]
+    "messages": [{"role": "user", "content": "Write a haiku about Go."}]
   }'
 ```
 
-### Enable Web Search + Deep Thinking
+**Web search + deep thinking**
 
 ```bash
 curl -X POST http://localhost:3001/v1/chat/completions \
@@ -152,13 +141,11 @@ curl -X POST http://localhost:3001/v1/chat/completions \
     "stream": true,
     "webSearch": true,
     "deepThink": true,
-    "messages": [
-      {"role": "user", "content": "Summarize today'\''s top AI news."}
-    ]
+    "messages": [{"role": "user", "content": "Summarize today'\''s top AI news."}]
   }'
 ```
 
-### Toggle Global Features
+**Toggle global features**
 
 ```bash
 curl -X POST http://localhost:3001/features \
@@ -167,7 +154,7 @@ curl -X POST http://localhost:3001/features \
   -d '{"thinking": true, "webSearch": true, "imageGen": false}'
 ```
 
-### Use with the OpenAI SDK (Python)
+**Python (OpenAI SDK)**
 
 ```python
 from openai import OpenAI
@@ -186,9 +173,9 @@ print(resp.choices[0].message.content)
 
 ---
 
-## 🧵 Session Persistence
+## Session Persistence
 
-Pass an `X-Session-Id` header to pin a conversation thread across requests. Send `X-Fresh-Session: true` to force a new chat. Sessions auto-expire after 30 minutes of inactivity.
+Pass `X-Session-Id` to pin a conversation thread across requests. Use `X-Fresh-Session: true` to start a new one. Sessions expire after 30 minutes of inactivity.
 
 ```bash
 curl -X POST http://localhost:3001/v1/chat/completions \
@@ -200,42 +187,42 @@ curl -X POST http://localhost:3001/v1/chat/completions \
 
 ---
 
-## 🔐 How It Works
+## How It Works
 
-1. **Guest Token** — On startup, the server calls Z.AI's `/api/v1/auths/guest` to obtain a session JWT (or uses `ZAI_TOKEN` if provided).
-2. **Captcha Param** — For each chat request, the server generates an Aliyun `captcha_verify_param` entirely in-memory:
-   - `InitCaptchaV3` → get `certifyId`
-   - Generate `arg` via a RC4-like permutation cipher
+1. **Guest token** — On startup, the server calls Z.AI's `/api/v1/auths/guest` for a session JWT, or uses `ZAI_TOKEN` if provided.
+2. **Captcha** — For each request, an Aliyun `captcha_verify_param` is generated in-memory:
+   - `InitCaptchaV3` → obtain `certifyId`
+   - Generate `arg` via RC4-like permutation cipher
    - Compute `ali_hash`, zlib-compress, base64-encode, then `encrypt`
    - `VerifyCaptchaV3` with a pooled device token → receive `securityToken`
    - Base64-encode the final payload
-3. **Signature** — HMAC-SHA256 over `(sortedPayload | promptBase64 | timestamp)` using a salted bucket key.
-4. **Stream** — POST to `/api/v2/chat/completions` with `stream: true`, parse SSE chunks (`edit_content`, `delta_content`, `content`), and forward as OpenAI-formatted SSE.
+3. **Signature** — HMAC-SHA256 over `(sortedPayload | promptBase64 | timestamp)` with a salted bucket key.
+4. **Streaming** — POST to `/api/v2/chat/completions` with `stream: true`, parse SSE chunks (`edit_content`, `delta_content`, `content`), and forward as OpenAI-formatted SSE.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 zai-api/
-├── main.go            # HTTP server, captcha gen, Z.AI bridge, OpenAI shim
-├── init.go            # Seed tokens.sqlite with device tokens
-├── tokens.sqlite      # Generated token pool (consumed at runtime)
+├── main.go          # HTTP server, captcha generation, Z.AI bridge, OpenAI shim
+├── init.go          # Seeds tokens.sqlite with device tokens
+├── tokens.sqlite    # Generated token pool (consumed at runtime)
 ├── go.mod
 └── README.md
 ```
 
 ---
 
-## ⚠️ Notes
+## Notes
 
-- Device tokens in `tokens.sqlite` are **consumed and deleted** after use. Re-run `init.go` to replenish.
-- The default auth token (`Waguri`) is insecure — override with `AUTH_TOKEN`.
-- If `ZAI_TOKEN` is set, guest initialization is skipped and the JWT is used directly.
-- `LOG_LEVEL=debug` will dump every Z.AI request/response — useful for troubleshooting.
+- Device tokens are **consumed and deleted** after use. Re-run `init.go` to replenish the pool.
+- The default auth token (`Waguri`) is a placeholder — set `AUTH_TOKEN` in production.
+- `ZAI_TOKEN` bypasses guest initialization entirely; without it, only `glm-4.7` is accessible.
+- `LOG_LEVEL=debug` dumps every Z.AI request and response — useful for troubleshooting.
 
 ---
 
-## 📜 License
+## License
 
 Provided as-is for educational and interoperability purposes. Use responsibly and in accordance with Z.AI's terms of service.
