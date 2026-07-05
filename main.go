@@ -271,8 +271,28 @@ var (
 
 const SESSION_TTL = 30 * 60 * 1000 * time.Millisecond
 
-var knownModels = []string{
-    "glm-4.7", "glm-5", "GLM-5-Turbo", "GLM-5v-Turbo", "GLM-5.1",
+type ModelInfo struct {
+    ID           string
+    Name         string
+    Description  string
+    Capabilities map[string]interface{}
+}
+
+var (
+    modelsCache     []ModelInfo
+    modelsCacheTime time.Time
+    modelsCacheMu   sync.Mutex
+)
+
+const modelsCacheTTL = 5 * time.Minute
+
+// Fallback if Z.AI API is unreachable and cache is empty
+var fallbackModels = []ModelInfo{
+    {ID: "glm-5.2", Name: "GLM-5.2", Description: "Flagship model, excels at coding and long-horizon tasks"},
+    {ID: "GLM-5.1", Name: "GLM-5.1", Description: "Previous flagship model"},
+    {ID: "GLM-5-Turbo", Name: "GLM-5-Turbo", Description: "New model for chat, coding, and agentic task"},
+    {ID: "GLM-5v-Turbo", Name: "GLM-5V-Turbo", Description: "Vision model with evolved intelligence"},
+    {ID: "glm-4.7", Name: "GLM-4.7", Description: "Classic high-performance model"},
 }
 
 var feVersionRe = regexp.MustCompile(`prod-fe-\d+\.\d+\.\d+`)
@@ -1991,16 +2011,147 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
     })
 }
 
+// fetchModelsFromZAI retrieves models from Z.AI /api/models,
+// keeping only glm-4.7 and newer (the API returns newest-first).
+func fetchModelsFromZAI() []ModelInfo {
+    modelsCacheMu.Lock()
+    defer modelsCacheMu.Unlock()
+
+    if len(modelsCache) > 0 && time.Since(modelsCacheTime) < modelsCacheTTL {
+        return modelsCache
+    }
+
+    ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+    defer cancel()
+
+    req, err := http.NewRequestWithContext(ctx, "GET", BASE_URL+"/api/models", nil)
+    if err != nil {
+        logError("fetchModels request: " + err.Error())
+        if len(modelsCache) > 0 {
+            return modelsCache
+        }
+        return fallbackModels
+    }
+    req.Header.Set("Accept", "application/json")
+
+    resp, err := zaiHTTPClient.Do(req)
+    if err != nil {
+        logError("fetchModels do: " + err.Error())
+        if len(modelsCache) > 0 {
+            return modelsCache
+        }
+        return fallbackModels
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != 200 {
+        logError(fmt.Sprintf("fetchModels status: %d", resp.StatusCode))
+        if len(modelsCache) > 0 {
+            return modelsCache
+        }
+        return fallbackModels
+    }
+
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        logError("fetchModels read: " + err.Error())
+        if len(modelsCache) > 0 {
+            return modelsCache
+        }
+        return fallbackModels
+    }
+
+    var apiResp struct {
+        Data []struct {
+            ID   string `json:"id"`
+            Name string `json:"name"`
+            Info struct {
+                Name string `json:"name"`
+                Meta struct {
+                    Description  string                 `json:"description"`
+                    Capabilities map[string]interface{} `json:"capabilities"`
+                } `json:"meta"`
+            } `json:"info"`
+        } `json:"data"`
+    }
+
+    if err := json.Unmarshal(body, &apiResp); err != nil {
+        logError("fetchModels parse: " + err.Error())
+        if len(modelsCache) > 0 {
+            return modelsCache
+        }
+        return fallbackModels
+    }
+
+    var filtered []ModelInfo
+    for _, m := range apiResp.Data {
+        filtered = append(filtered, ModelInfo{
+            ID:           m.ID,
+            Name:         m.Name,
+            Description:  m.Info.Meta.Description,
+            Capabilities: m.Info.Meta.Capabilities,
+        })
+        // glm-4.7 is the cutoff — stop here (inclusive)
+        if m.ID == "glm-4.7" {
+            break
+        }
+    }
+
+    if len(filtered) > 0 {
+        modelsCache = filtered
+        modelsCacheTime = time.Now()
+        logInfo(fmt.Sprintf("Fetched %d models from Z.AI", len(filtered)))
+    }
+
+    if len(modelsCache) > 0 {
+        return modelsCache
+    }
+    return fallbackModels
+}
+
+// getFeaturesForModel maps a model's capabilities to a Features struct.
+func getFeaturesForModel(modelID string) Features {
+    f := Features{}
+    for _, m := range fetchModelsFromZAI() {
+        if strings.EqualFold(m.ID, modelID) {
+            if v, ok := m.Capabilities["web_search"].(bool); ok {
+                f.WebSearch = v
+                f.AutoWebSearch = v
+            }
+            if v, ok := m.Capabilities["think"].(bool); ok {
+                f.Thinking = v
+            }
+            if v, ok := m.Capabilities["preview_mode"].(bool); ok {
+                f.PreviewMode = v
+            }
+            break
+        }
+    }
+    return f
+}
+
+// getModelCapabilities returns the raw capabilities map for a model.
+func getModelCapabilities(modelID string) map[string]interface{} {
+    for _, m := range fetchModelsFromZAI() {
+        if strings.EqualFold(m.ID, modelID) {
+            return m.Capabilities
+        }
+    }
+    return nil
+}
+
 func modelsHandler(w http.ResponseWriter, r *http.Request) {
     now := time.Now().Unix()
-    data := make([]map[string]interface{}, 0, len(knownModels))
-    for _, m := range knownModels {
+    models := fetchModelsFromZAI()
+    data := make([]map[string]interface{}, 0, len(models))
+    for _, m := range models {
         data = append(data, map[string]interface{}{
-            "id":           m,
+            "id":           m.ID,
             "object":       "model",
             "created":      now,
             "owned_by":     "z-ai",
-            "display_name": m,
+            "display_name": m.Name,
+            "description":  m.Description,
         })
     }
     writeJSON(w, 200, map[string]interface{}{
@@ -2010,9 +2161,18 @@ func modelsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func modelsHandler2(w http.ResponseWriter, r *http.Request) {
+    models := fetchModelsFromZAI()
+    ids := make([]string, 0, len(models))
+    for _, m := range models {
+        ids = append(ids, m.ID)
+    }
+    currentModel := "glm-5.2"
+    if len(ids) > 0 {
+        currentModel = ids[0]
+    }
     writeJSON(w, 200, map[string]interface{}{
-        "models":       knownModels,
-        "currentModel": "glm-5",
+        "models":       ids,
+        "currentModel": currentModel,
     })
 }
 
@@ -2309,45 +2469,91 @@ func promptHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func featuresHandler(w http.ResponseWriter, r *http.Request) {
+    // GET — return current features, optionally for a specific model
+    if r.Method == "GET" {
+        model := r.URL.Query().Get("model")
+        session.mu.Lock()
+        features := session.Features
+        session.mu.Unlock()
+
+        resp := map[string]interface{}{
+            "features": features,
+        }
+        if model != "" {
+            resp["model"] = model
+            resp["modelFeatures"] = getFeaturesForModel(model)
+            resp["capabilities"] = getModelCapabilities(model)
+        }
+        writeJSON(w, 200, resp)
+        return
+    }
+
     if r.Method != "POST" {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         return
     }
 
     var body struct {
-        WebSearch      *bool `json:"webSearch"`
-        Thinking       *bool `json:"thinking"`
-        ImageGen       *bool `json:"imageGen"`
-        PreviewMode    *bool `json:"previewMode"`
-        PersistHistory *bool `json:"persistHistory"`
+        Model          *string `json:"model"`
+        WebSearch      *bool   `json:"webSearch"`
+        Thinking       *bool   `json:"thinking"`
+        ImageGen       *bool   `json:"imageGen"`
+        PreviewMode    *bool   `json:"previewMode"`
+        PersistHistory *bool   `json:"persistHistory"`
     }
     bodyBytes, _ := io.ReadAll(r.Body)
     json.Unmarshal(bodyBytes, &body)
 
     session.mu.Lock()
-    if body.WebSearch != nil {
+
+    // If a model is specified, apply its capabilities as the base feature set
+    var modelCaps map[string]interface{}
+    if body.Model != nil && *body.Model != "" {
+        mf := getFeaturesForModel(*body.Model)
+        session.Features.WebSearch = mf.WebSearch
+        session.Features.AutoWebSearch = mf.AutoWebSearch
+        session.Features.Thinking = mf.Thinking
+        session.Features.PreviewMode = mf.PreviewMode
+        modelCaps = getModelCapabilities(*body.Model)
+    }
+
+    // Apply explicit overrides — clamped to model capabilities when a model is set
+    hasModel := body.Model != nil && *body.Model != ""
+    capAllows := func(key string) bool {
+        if !hasModel {
+            return true
+        }
+        if v, ok := modelCaps[key].(bool); ok {
+            return v
+        }
+        return false
+    }
+
+    if body.WebSearch != nil && capAllows("web_search") {
         session.Features.WebSearch = *body.WebSearch
         session.Features.AutoWebSearch = *body.WebSearch
     }
-    if body.Thinking != nil {
+    if body.Thinking != nil && capAllows("think") {
         session.Features.Thinking = *body.Thinking
     }
     if body.ImageGen != nil {
         session.Features.ImageGen = *body.ImageGen
     }
-    if body.PreviewMode != nil {
+    if body.PreviewMode != nil && capAllows("preview_mode") {
         session.Features.PreviewMode = *body.PreviewMode
     }
     if body.PersistHistory != nil {
         session.Features.PersistHistory = *body.PersistHistory
     }
+
     features := session.Features
     session.mu.Unlock()
 
-    log.Printf("[Features] Updated: %+v", features)
+    log.Printf("[Features] Updated: %+v (model=%v)", features, body.Model)
     writeJSON(w, 200, map[string]interface{}{
         "success":  true,
         "features": features,
+        "model":    body.Model,
     })
 }
 
@@ -2514,6 +2720,8 @@ func main() {
         if err := initializeSession(); err != nil {
             log.Println("[Startup] Session init deferred — will retry on first request.")
         }
+        // Warm up model cache
+        fetchModelsFromZAI()
     }()
 
     srv := &http.Server{
