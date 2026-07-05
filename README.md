@@ -24,9 +24,9 @@ An OpenAI-compatible API proxy for [chat.z.ai](https://chat.z.ai). Drop it in fr
 |---|---|
 | `glm-4.7` | Available without `ZAI_TOKEN` |
 | `glm-5` | Default |
-| `GLM-5-Turbo` | |
+| `GLM-5-Turbo` | New model for chat, coding, and agentic task |
 | `GLM-5v-Turbo` | Vision variant |
-| `GLM-5.1` | Latest |
+| `GLM-5.1` | Previous flagship model |
 
 > **Note:** If `ZAI_TOKEN` is not set, only `glm-4.7` is available.
 
