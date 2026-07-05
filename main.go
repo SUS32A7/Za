@@ -1703,6 +1703,75 @@ func sendToZAIStream(prompt string, opts struct {
     return errors.New("Max retries exceeded")
 }
 
+// extractZAIError inspects a parsed Z.AI SSE payload for an embedded error
+// (Z.AI sometimes returns HTTP 200 with the error inside the JSON body).
+// Returns the human-readable detail string, or "" if no error is present.
+func extractZAIError(j map[string]interface{}) string {
+    if data, ok := j["data"].(map[string]interface{}); ok {
+        // data.error
+        if errObj, ok := data["error"].(map[string]interface{}); ok {
+            detail, _ := errObj["detail"].(string)
+            if detail == "" {
+                if s, ok := errObj["message"].(string); ok {
+                    detail = s
+                }
+            }
+            if detail != "" {
+                if code, ok := errObj["code"]; ok && code != nil {
+                    return fmt.Sprintf("%s (code: %v)", detail, code)
+                }
+                return detail
+            }
+        }
+        // data.data.error (nested variant observed in production)
+        if nested, ok := data["data"].(map[string]interface{}); ok {
+            if errObj, ok := nested["error"].(map[string]interface{}); ok {
+                detail, _ := errObj["detail"].(string)
+                if detail == "" {
+                    if s, ok := errObj["message"].(string); ok {
+                        detail = s
+                    }
+                }
+                if detail != "" {
+                    if code, ok := errObj["code"]; ok && code != nil {
+                        return fmt.Sprintf("%s (code: %v)", detail, code)
+                    }
+                    return detail
+                }
+            }
+        }
+    }
+    // Top-level error (non-Z.AI shape, just in case)
+    if errObj, ok := j["error"].(map[string]interface{}); ok {
+        detail, _ := errObj["detail"].(string)
+        if detail == "" {
+            if s, ok := errObj["message"].(string); ok {
+                detail = s
+            }
+        }
+        if detail != "" {
+            return detail
+        }
+    }
+    return ""
+}
+
+// statusFromError maps a Z.AI/bridge error string to an HTTP status code.
+func statusFromError(errMsg string) int {
+    switch {
+    case strings.Contains(errMsg, "401"):
+        return 401
+    case strings.Contains(errMsg, "403"):
+        return 403
+    case strings.Contains(errMsg, "429"):
+        return 429
+    case strings.Contains(errMsg, "400"):
+        return 400
+    default:
+        return 500
+    }
+}
+
 func streamSSEResponse(body io.Reader, ch chan<- ZAIResult) error {
     scanner := bufio.NewScanner(body)
     scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
@@ -1731,7 +1800,14 @@ func streamSSEResponse(body io.Reader, ch chan<- ZAIResult) error {
             continue
         }
 
-        
+        // ── Detect inline errors (HTTP 200 with error in body) ──
+        if errDetail := extractZAIError(j); errDetail != "" {
+            if config.Logging.Level == "debug" {
+                log.Println("[DEBUG] Z.AI inline SSE error:", errDetail)
+            }
+            return fmt.Errorf("Z.AI error: %s", errDetail)
+        }
+
         if data, ok := j["data"].(map[string]interface{}); ok {
             if phase, ok := data["phase"].(string); ok && phase == "done" {
                 return nil
@@ -2413,14 +2489,14 @@ func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
         ch, err := sendToZAI(prompt, opts)
         if err != nil {
             log.Printf("[Stream] Error: %s", err.Error())
-            writeSSE(toJSON(map[string]interface{}{"error": map[string]string{"message": err.Error()}}))
+            writeSSE(toJSON(formatOpenAIError(err.Error(), "api_error", statusFromError(err.Error()))))
             writeSSE("[DONE]")
             errored = true
         } else {
             for result := range ch {
                 if result.Err != nil {
                     log.Printf("[Stream] Error: %s", result.Err.Error())
-                    writeSSE(toJSON(map[string]interface{}{"error": map[string]string{"message": result.Err.Error()}}))
+                    writeSSE(toJSON(formatOpenAIError(result.Err.Error(), "api_error", statusFromError(result.Err.Error()))))
                     writeSSE("[DONE]")
                     errored = true
                     break
@@ -2464,11 +2540,7 @@ func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
         ch, err := sendToZAI(prompt, opts)
         if err != nil {
             log.Printf("[API] Error: %s", err.Error())
-            statusCode := 500
-            if strings.Contains(err.Error(), "401") {
-                statusCode = 401
-            }
-            writeJSON(w, statusCode, formatOpenAIError(err.Error(), "api_error", nil))
+            writeJSON(w, statusFromError(err.Error()), formatOpenAIError(err.Error(), "api_error", nil))
             return
         }
 
@@ -2476,12 +2548,7 @@ func chatCompletionsHandler(w http.ResponseWriter, r *http.Request) {
         for result := range ch {
             if result.Err != nil {
                 log.Printf("[API] Error: %s", result.Err.Error())
-                statusCode := 500
-                if strings.Contains(result.Err.Error(), "401") {
-                    statusCode = 401
-                }
-                
-                writeJSON(w, statusCode, formatOpenAIError(result.Err.Error(), "api_error", nil))
+                writeJSON(w, statusFromError(result.Err.Error()), formatOpenAIError(result.Err.Error(), "api_error", nil))
                 return
             }
             if result.FullText != "" {
