@@ -46,12 +46,12 @@ go mod tidy
 # 3. Generate the token database
 go run init.go
 # Recommended: build first for better performance and faster startup:
-#   go build -o token-collector init.go -ldflags="-s -w" . && ./token-collector
+#   go build -o token-collector -ldflags="-s -w" init.go && ./token-collector
 
 # 4. Start the server
 go run main.go
 # Recommended: build first for better performance and faster startup:
-#   go build -o zai-api main.go -ldflags="-s -w" . && ./zai-api
+#   go build -o zai-api -ldflags="-s -w" main.go && ./zai-api
 ```
 
 On startup, you'll see a banner with your dashboard URL and auth token.
