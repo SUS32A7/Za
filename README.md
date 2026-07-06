@@ -27,6 +27,7 @@ An OpenAI-compatible API proxy for [chat.z.ai](https://chat.z.ai). Drop it in fr
 | `GLM-5-Turbo` | New model for chat, coding, and agentic task |
 | `GLM-5v-Turbo` | Vision variant |
 | `GLM-5.1` | Previous flagship model |
+| `glm-5.2` | Current flagship model |
 
 > **Note:** If `ZAI_TOKEN` is not set, only `glm-4.7` is available.
 
@@ -111,7 +112,7 @@ curl -X POST http://localhost:3001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer Waguri" \
   -d '{
-    "model": "glm-5",
+    "model": "glm-4.7",
     "stream": false,
     "messages": [{"role": "user", "content": "Hello, who are you?"}]
   }'
@@ -124,7 +125,7 @@ curl -N -X POST http://localhost:3001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer Waguri" \
   -d '{
-    "model": "glm-5",
+    "model": "glm-4.7",
     "stream": true,
     "messages": [{"role": "user", "content": "Write a haiku about Go."}]
   }'
@@ -137,7 +138,7 @@ curl -X POST http://localhost:3001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer Waguri" \
   -d '{
-    "model": "GLM-5.1",
+    "model": "glm-4.7",
     "stream": true,
     "webSearch": true,
     "deepThink": true,
@@ -165,7 +166,7 @@ client = OpenAI(
 )
 
 resp = client.chat.completions.create(
-    model="glm-5",
+    model="glm-4.7",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 print(resp.choices[0].message.content)
@@ -182,7 +183,7 @@ curl -X POST http://localhost:3001/v1/chat/completions \
   -H "Authorization: Bearer Waguri" \
   -H "X-Session-Id: my-thread-1" \
   -H "Content-Type: application/json" \
-  -d '{"model":"glm-5","messages":[{"role":"user","content":"My name is Alice."}]}'
+  -d '{"model":"glm-4.7","messages":[{"role":"user","content":"My name is Alice."}]}'
 ```
 
 ---
