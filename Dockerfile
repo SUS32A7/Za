@@ -11,9 +11,11 @@ RUN go mod init zai-bridge && \
     go get github.com/mxschmitt/playwright-go && \
     go mod tidy
 
-# Build both binaries
 RUN go build -trimpath -ldflags="-s -w" -o zai-bridge main.go
 RUN go build -trimpath -ldflags="-s -w" -o token-collector init.go
+
+# Install Playwright driver at build time
+RUN go run github.com/mxschmitt/playwright-go/cmd/playwright install --with-deps chromium
 
 # --- Final image ---
 FROM golang:1.25-alpine
@@ -23,7 +25,7 @@ RUN apk add --no-cache \
     chromium \
     nss freetype harfbuzz \
     ttf-freefont font-noto-emoji \
-    dbus udev
+    dbus udev xvfb
 
 WORKDIR /app
 
@@ -31,13 +33,16 @@ COPY --from=builder /app/zai-bridge .
 COPY --from=builder /app/token-collector .
 COPY --from=builder /app/.assets ./.assets
 COPY --from=builder /app/image-gen ./image-gen
+
+# Copy the Playwright driver from builder
+COPY --from=builder /root/.cache/ms-playwright-go /root/.cache/ms-playwright-go
+
 COPY start.sh .
 RUN chmod +x start.sh
 
 ENV PORT=3001
 ENV TZ=Asia/Shanghai
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-ENV CHROMIUM_PATH=/usr/bin/chromium-browser
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright-go
 
 EXPOSE 3001
 
