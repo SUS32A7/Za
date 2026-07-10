@@ -1,21 +1,47 @@
-#!/bin/sh
-set -e
+FROM golang:1.25-alpine AS builder
 
-DB_PATH=${DB_PATH:-/data/tokens.sqlite}
+RUN apk add --no-cache git nodejs npm
 
-TOKEN_COUNT=0
-if [ -f "$DB_PATH" ]; then
-    TOKEN_COUNT=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tokens;" 2>/dev/null || echo 0)
-fi
+WORKDIR /app
 
-echo "==> Found $TOKEN_COUNT tokens in DB"
+COPY . .
 
-if [ "$TOKEN_COUNT" -lt 50 ]; then
-    echo "==> Collecting tokens..."
-    ./token-collector --tokens 750 --batch 3 --parallel 1
-else
-    echo "==> Skipping collection, enough tokens"
-fi
+RUN go mod init zai-bridge && \
+    go get modernc.org/sqlite@v1.53.0 && \
+    go get github.com/mxschmitt/playwright-go && \
+    go mod tidy
 
-echo "==> Starting server..."
-exec ./zai-bridge --db-path "$DB_PATH"
+RUN go build -trimpath -ldflags="-s -w" -o zai-bridge main.go
+RUN go build -trimpath -ldflags="-s -w" -o token-collector init.go
+
+# Now Node exists, so the installer can run
+RUN go run github.com/mxschmitt/playwright-go/cmd/playwright install chromium
+
+# --- Final image ---
+FROM golang:1.25-alpine
+
+RUN apk add --no-cache \
+    ca-certificates tzdata sqlite nodejs \
+    chromium \
+    nss freetype harfbuzz \
+    ttf-freefont font-noto-emoji \
+    dbus udev xvfb
+
+WORKDIR /app
+
+COPY --from=builder /app/zai-bridge .
+COPY --from=builder /app/token-collector .
+COPY --from=builder /app/.assets ./.assets
+COPY --from=builder /app/image-gen ./image-gen
+COPY --from=builder /root/.cache/ms-playwright-go /root/.cache/ms-playwright-go
+
+COPY start.sh .
+RUN chmod +x start.sh
+
+ENV PORT=3001
+ENV TZ=Asia/Shanghai
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright-go
+
+EXPOSE 3001
+
+CMD ["./start.sh"]
