@@ -1,33 +1,40 @@
 FROM golang:1.22-alpine AS builder
 
+# Install git (needed for go get)
+RUN apk add --no-cache git
+
 WORKDIR /app
 
-# Copy go mod files if they exist
-COPY go.mod go.sum* ./
-
-# Download dependencies
-RUN go mod download 2>/dev/null || true
-
-# Copy source
+# Copy source files
 COPY . .
 
-# Build the binary
-RUN go build -o server .
+# Generate go.mod and fetch dependencies
+RUN go mod init zai-bridge && \
+    go get modernc.org/sqlite && \
+    go mod tidy
+
+# Build only main.go (the server), excluding init.go (the token collector)
+RUN go build -trimpath -ldflags="-s -w" -o zai-bridge main.go
 
 # --- Final minimal image ---
 FROM alpine:latest
 
+RUN apk add --no-cache ca-certificates tzdata
+
 WORKDIR /app
 
-COPY --from=builder /app/server .
-
-# Copy any assets needed at runtime
+COPY --from=builder /app/zai-bridge .
 COPY --from=builder /app/.assets ./.assets
 COPY --from=builder /app/image-gen ./image-gen
 
-EXPOSE 8000
+# Create an empty tokens.sqlite so the server starts without crashing
+RUN apk add --no-cache sqlite && \
+    sqlite3 tokens.sqlite "CREATE TABLE IF NOT EXISTS tokens (id INTEGER PRIMARY KEY, token TEXT, batch INTEGER);" && \
+    apk del sqlite
 
-ENV PORT=8000
+EXPOSE 3001
+
+ENV PORT=3001
 ENV TZ=Asia/Shanghai
 
-CMD ["./server"]
+CMD ["./zai-bridge"]
