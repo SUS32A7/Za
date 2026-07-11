@@ -1,6 +1,6 @@
 FROM golang:1.25-alpine AS builder
 
-RUN apk add --no-cache git nodejs npm
+RUN apk add --no-cache git nodejs npm curl unzip
 
 WORKDIR /app
 
@@ -11,16 +11,20 @@ RUN go mod init zai-bridge && \
     go get github.com/mxschmitt/playwright-go && \
     go mod tidy
 
-# Build server (main.go only)
 RUN go build -trimpath -ldflags="-s -w" -o zai-bridge main.go
-
-# Build token collector (init.go only)
 RUN go build -trimpath -ldflags="-s -w" -o token-collector init.go
+
+# Download the Playwright Node driver into the exact path the Go lib expects
+RUN mkdir -p /root/.cache/ms-playwright-go/1.61.1 && \
+    curl -L "https://playwright.azureedge.net/builds/driver/playwright-1.61.1-linux-x64.zip" \
+    -o /tmp/pw-driver.zip && \
+    unzip /tmp/pw-driver.zip -d /root/.cache/ms-playwright-go/1.61.1 && \
+    chmod +x /root/.cache/ms-playwright-go/1.61.1/node && \
+    rm /tmp/pw-driver.zip
 
 # --- Final image ---
 FROM alpine:latest
 
-# System Chromium + Node.js for Playwright driver
 RUN apk add --no-cache \
     ca-certificates tzdata sqlite nodejs \
     chromium \
@@ -34,12 +38,14 @@ COPY --from=builder /app/zai-bridge .
 COPY --from=builder /app/token-collector .
 COPY --from=builder /app/.assets ./.assets
 COPY --from=builder /app/image-gen ./image-gen
+# Bake the Playwright driver into the final image
+COPY --from=builder /root/.cache/ms-playwright-go /root/.cache/ms-playwright-go
 COPY start.sh .
 RUN chmod +x start.sh
 
 ENV PORT=3001
 ENV TZ=Asia/Shanghai
-# Tell Playwright to use the system Chromium instead of downloading its own
+# Use system Chromium, skip downloading a second copy
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
