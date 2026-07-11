@@ -8,7 +8,7 @@ COPY . .
 
 RUN go mod init zai-bridge && \
     go get modernc.org/sqlite@v1.53.0 && \
-    go get github.com/mxschmitt/playwright-go && \
+    go get github.com/mxschmitt/playwright-go@v0.6100.0 && \
     go mod tidy
 
 RUN go build -trimpath -ldflags="-s -w" -o zai-bridge main.go
@@ -20,10 +20,11 @@ RUN grep "mxschmitt/playwright-go" go.mod
 # Download the Playwright Node driver into the exact path the Go lib expects.
 # URL format is playwright-<version>-linux.zip (NOT linux-x64), and -f makes
 # curl fail loudly (non-zero exit) on a 404/error instead of saving garbage.
-RUN PW_VERSION="1.61.1" && \
+RUN PW_VERSION="1.61.0" && \
     mkdir -p /root/.cache/ms-playwright-go/${PW_VERSION} && \
-    curl -fL "https://playwright.azureedge.net/builds/driver/playwright-${PW_VERSION}-linux.zip" \
-    -o /tmp/pw-driver.zip && \
+    ( curl -fL "https://playwright.azureedge.net/builds/driver/playwright-${PW_VERSION}-linux.zip" -o /tmp/pw-driver.zip \
+      || curl -fL "https://playwright-akamai.azureedge.net/builds/driver/playwright-${PW_VERSION}-linux.zip" -o /tmp/pw-driver.zip \
+      || curl -fL "https://playwright-verizon.azureedge.net/builds/driver/playwright-${PW_VERSION}-linux.zip" -o /tmp/pw-driver.zip ) && \
     unzip -q /tmp/pw-driver.zip -d /root/.cache/ms-playwright-go/${PW_VERSION} && \
     chmod +x /root/.cache/ms-playwright-go/${PW_VERSION}/node && \
     rm /tmp/pw-driver.zip && \
